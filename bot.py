@@ -769,8 +769,8 @@ async def on_message(message):
         
         # Це бачать УСІ користувачі
         desc = "**🔹 User Commands:**\n"
-        desc += "**`!help`** — Show this list\n"
-        desc += "**`!traffic`** — Live radar (active flights)\n\n"
+        desc += "**`!help`** — Show command list\n"
+        desc += "**`!traffic`** — Show active flights\n"
         
         # Це додається ТІЛЬКИ якщо користувач — адмін
         if is_admin:
@@ -783,7 +783,6 @@ async def on_message(message):
             desc += "**`!undo`** — Delete last !msg or !reply\n"
             desc += "**`!wow <ID> <emoji>`** — React to message\n"
             desc += "**`!unwow <ID> <emoji>`** — Remove reaction\n"
-            desc += "**`!clearwow <ID>`** — Clear all reactions\n"
             desc += "**`!cache`** — Download sent.json memory\n\n"
             desc += "**🎭 Status Management (Admin):**\n"
             desc += "**`!next`** — Force next status\n"
@@ -999,3 +998,4 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
