@@ -778,7 +778,7 @@ async def on_message(message):
                 arr = f.get("arr", {}).get("icao", "???") if isinstance(f.get("arr"), dict) else "???"
                 
                 # Формуємо красивий мінімалістичний рядок
-                desc_lines.append(f"### ✈️ **{full_cs}** • {pilot} • {ac} • **{dep}** ➔ **{arr}**")
+                desc_lines.append(f"{full_cs} • {pilot} • {ac} • {dep} ➔ {arr}")
             
             # Створюємо фінальний Ембед
             embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic", description="\n".join(desc_lines), color=0x3498db)
@@ -1055,4 +1055,5 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
