@@ -133,33 +133,23 @@ def format_airport_string(icao, api_name):
         name = db_data.get("name", "") or ""
         country = db_data.get("country", "XX")
         
-        # 🔥 ВИПРАВЛЕННЯ НАЗВ МІСТ 🔥
-        if city.lower() == "kiev": city = "Kyiv"
-        name = name.replace("Kiev", "Kyiv")
+        # 🔥 ВИПРАВЛЕННЯ НАЗВ МІСТ (СЛОВНИК) 🔥
+        CITY_FIXES = {
+            "Kiev": "Kyiv",
+            "Dnipropetrovsk": "Dnipro",
+            "Kirovograd": "Kropyvnytskyi",
+            "Nikolayev": "Mykolaiv",
+            "Odessa": "Odesa",
+            "Vinnitsa": "Vinnytsia",
+            "Zaporizhia": "Zaporizhzhia",
+            "Larnarca": "Larnaca",
+            "Sharm el-Sheikh": "Sharm El Sheikh"
+        }
         
-        if city.lower() == "dnipropetrovsk": city = "Dnipro"
-        name = name.replace("Dnipropetrovsk", "Dnipro")      
-
-        if city.lower() == "kirovograd": city = "Kropyvnytskyi"
-        name = name.replace("Kirovograd", "Kropyvnytskyi")
-
-        if city.lower() == "nikolayev": city = "Mykolaiv"
-        name = name.replace("Nikolayev", "Mykolaiv")
-
-        if city.lower() == "odessa": city = "Odesa"
-        name = name.replace("Odessa", "Odesa")
-
-        if city.lower() == "vinnitsa": city = "Vinnytsia"
-        name = name.replace("Vinnitsa", "Vinnytsia")
-
-        if city.lower() == "zaporizhia": city = "Zaporizhzhia"
-        name = name.replace("Zaporizhia", "Zaporizhzhia")
-
-        if city.lower() == "larnarca": city = "Larnaca"
-        name = name.replace("Larnarca", "Larnaca")
-
-        if city.lower() == "Sharm el-Sheikh": city = "Sharm El Sheikh"
-        name = name.replace("Sharm el-Sheikh", "Sharm El Sheikh")
+        for old, new in CITY_FIXES.items():
+            if city.lower() == old.lower(): 
+                city = new
+            name = name.replace(old, new)
         
         clean_name = clean_text(name)
         display_text = ""
@@ -426,6 +416,32 @@ async def status_loop():
         await change_status()
         await asyncio.sleep(3600)
 
+# --- 🔍 ФУНКЦІЯ: Універсальний пошук повідомлень (DRY принцип) ---
+async def find_discord_message(target_id, command_message):
+    found_message = None
+    main_channel = client.get_channel(CHANNEL_ID)
+    
+    if main_channel:
+        try:
+            found_message = await main_channel.fetch_message(target_id)
+        except:
+            pass
+    
+    if not found_message:
+        await command_message.channel.send("🔍 **Searching for message...**")
+        for guild in client.guilds:
+            for channel in guild.text_channels:
+                if channel.id == CHANNEL_ID: continue
+                try:
+                    found_message = await channel.fetch_message(target_id)
+                    if found_message: break
+                except:
+                    continue
+            if found_message: break
+            
+    return found_message
+# -----------------------------------------------------------------
+
 @client.event
 async def on_message(message):
     global last_sent_message
@@ -459,36 +475,14 @@ async def on_message(message):
             return await message.channel.send("⚠️ Usage: `!clearwow <Message_ID>`")
         
         target_id = parts[1]
-        
         if not target_id.isdigit():
              return await message.channel.send("⚠️ ID must be a number.")
 
-        found_message = None
-        
-        main_channel = client.get_channel(CHANNEL_ID)
-        if main_channel:
-            try:
-                found_message = await main_channel.fetch_message(int(target_id))
-            except:
-                pass
-        
-        if not found_message:
-            await message.channel.send("🔍 **Searching for message...**")
-            for guild in client.guilds:
-                for channel in guild.text_channels:
-                    if channel.id == CHANNEL_ID: continue
-                    try:
-                        found_message = await channel.fetch_message(int(target_id))
-                        if found_message: break
-                    except:
-                        continue
-                if found_message: break
+        found_message = await find_discord_message(int(target_id), message)
         
         if found_message:
             try:
                 await found_message.clear_reactions()
-                
-                # Якщо канал знайдено (не приватні повідомлення), робимо згадку
                 channel_mention = found_message.channel.mention if hasattr(found_message.channel, 'mention') else "Direct Messages"
                 await message.channel.send(f"✅ **Cleared all reactions from message in {channel_mention}**")
             except discord.Forbidden:
@@ -536,30 +530,10 @@ async def on_message(message):
         
         target_id = parts[1]
         emoji = parts[2]
-        
         if not target_id.isdigit():
              return await message.channel.send("⚠️ ID must be a number.")
 
-        found_message = None
-        
-        main_channel = client.get_channel(CHANNEL_ID)
-        if main_channel:
-            try:
-                found_message = await main_channel.fetch_message(int(target_id))
-            except:
-                pass
-        
-        if not found_message:
-            await message.channel.send("🔍 **Searching for message...**")
-            for guild in client.guilds:
-                for channel in guild.text_channels:
-                    if channel.id == CHANNEL_ID: continue
-                    try:
-                        found_message = await channel.fetch_message(int(target_id))
-                        if found_message: break
-                    except:
-                        continue
-                if found_message: break
+        found_message = await find_discord_message(int(target_id), message)
         
         if found_message:
             try:
@@ -581,30 +555,10 @@ async def on_message(message):
         
         target_id = parts[1]
         emoji = parts[2]
-        
         if not target_id.isdigit():
              return await message.channel.send("⚠️ ID must be a number.")
 
-        found_message = None
-        
-        main_channel = client.get_channel(CHANNEL_ID)
-        if main_channel:
-            try:
-                found_message = await main_channel.fetch_message(int(target_id))
-            except:
-                pass
-        
-        if not found_message:
-            await message.channel.send("🔍 **Searching for message...**")
-            for guild in client.guilds:
-                for channel in guild.text_channels:
-                    if channel.id == CHANNEL_ID: continue
-                    try:
-                        found_message = await channel.fetch_message(int(target_id))
-                        if found_message: break
-                    except:
-                        continue
-                if found_message: break
+        found_message = await find_discord_message(int(target_id), message)
         
         if found_message:
             try:
@@ -627,31 +581,11 @@ async def on_message(message):
             return await message.channel.send("⚠️ Usage: `!reply <Message_ID> <text>`")
         
         target_id = parts[1]
-        
         if not target_id.isdigit():
              return await message.channel.send("⚠️ ID must be a number.")
 
         content = " ".join(parts[2:])
-        found_message = None
-        
-        main_channel = client.get_channel(CHANNEL_ID)
-        if main_channel:
-            try:
-                found_message = await main_channel.fetch_message(int(target_id))
-            except:
-                pass
-        
-        if not found_message:
-            await message.channel.send("🔍 **Searching for message to reply to...**")
-            for guild in client.guilds:
-                for channel in guild.text_channels:
-                    if channel.id == CHANNEL_ID: continue
-                    try:
-                        found_message = await channel.fetch_message(int(target_id))
-                        if found_message: break
-                    except:
-                        continue
-                if found_message: break
+        found_message = await find_discord_message(int(target_id), message)
         
         if found_message:
             try:
@@ -772,13 +706,13 @@ async def on_message(message):
                 ac_data = f.get("aircraft", {})
                 ac = "A/C"
                 if isinstance(ac_data, dict):
-                    ac = ac_data.get("airframe", {}).get("name") or ac_data.get("icao") or "A/C"
+                    ac = ac_data.get("icao") or ac_data.get("airframe", {}).get("icao") or ac_data.get("airframe", {}).get("name") or "A/C"
                 
                 dep = f.get("dep", {}).get("icao", "???") if isinstance(f.get("dep"), dict) else "???"
                 arr = f.get("arr", {}).get("icao", "???") if isinstance(f.get("arr"), dict) else "???"
                 
                 # Формуємо красивий мінімалістичний рядок
-                desc_lines.append(f"### ✈️ **{full_cs}** • {pilot} • {ac} • **{dep}** ➔ **{arr}**")
+                desc_lines.append(f"{full_cs}` • {pilot} • {ac} • {dep} ➔ {arr}")
             
             # Створюємо фінальний Ембед
             embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic", description="\n".join(desc_lines), color=0x3498db)
@@ -1055,6 +989,3 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
-
-
-
