@@ -37,6 +37,8 @@ client = discord.Client(intents=intents)
 
 # Глобальна змінна для бази
 AIRPORTS_DB = {}
+# 🆕 Чорний список для заборони реакцій (в оперативній пам'яті)
+BANNED_WOW_MESSAGES = set()
 # 🔥 Глобальна змінна-запобіжник від дублікатів
 MONITORING_STARTED = False
 LAST_TRAFFIC_TIME = 0.0  # ЗМІННА ДЛЯ ТАЙМЕРА !traffic
@@ -497,6 +499,33 @@ async def on_message(message):
             await message.channel.send("❌ **Message not found.** (Check ID or bot permissions)")
         return
     # -------------------------------------------------------------
+
+    # --- 🛡️ КОМАНДА: !banwow <ID> (ЗАБОРОНИТИ СМАЙЛИ) ---
+    if message.content.startswith("!banwow"):
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        parts = message.content.split()
+        if len(parts) < 2 or not parts[1].isdigit():
+            return await message.channel.send("⚠️ Usage: `!banwow <Message_ID>`")
+        
+        msg_id = int(parts[1])
+        BANNED_WOW_MESSAGES.add(msg_id)
+        await message.channel.send(f"🛡️ **Message {msg_id} is now protected!**\nБудь-які нові реакції будуть миттєво видалятися.")
+        return
+
+    # --- 🟢 КОМАНДА: !unbanwow <ID> (ДОЗВОЛИТИ СМАЙЛИ) ---
+    if message.content.startswith("!unbanwow"):
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        parts = message.content.split()
+        if len(parts) < 2 or not parts[1].isdigit():
+            return await message.channel.send("⚠️ Usage: `!unbanwow <Message_ID>`")
+        
+        msg_id = int(parts[1])
+        if msg_id in BANNED_WOW_MESSAGES:
+            BANNED_WOW_MESSAGES.remove(msg_id)
+            await message.channel.send(f"✅ **Protection removed.** Тепер на повідомлення {msg_id} знову можна ставити реакції.")
+        else:
+            await message.channel.send("⚠️ Це повідомлення і так не знаходиться у чорному списку.")
+        return
     
     # --- 👹 КОМАНДА: !wow <ID> <EMOJI> (СТАВИТИ РЕАКЦІЮ) ---
     if message.content.startswith("!wow"):
@@ -987,6 +1016,29 @@ async def main_loop():
             await asyncio.sleep(CHECK_INTERVAL)
 
 @client.event
+# --- ⚡ РАДАР РЕАКЦІЙ (МИТТЄВЕ ВИДАЛЕННЯ) ---
+@client.event
+async def on_raw_reaction_add(payload):
+    # Ігноруємо реакції самого бота (щоб він міг ставити смайли)
+    if payload.user_id == client.user.id:
+        return
+
+    # Перевіряємо, чи є ID повідомлення у нашому чорному списку
+    if payload.message_id in BANNED_WOW_MESSAGES:
+        try:
+            channel = client.get_channel(payload.channel_id)
+            if not channel: return
+            
+            message = await channel.fetch_message(payload.message_id)
+            user = client.get_user(payload.user_id)
+            if not user: return
+            
+            # Миттєво стираємо реакцію хулігана
+            await message.remove_reaction(payload.emoji, user)
+        except discord.Forbidden:
+            print("Немає прав на видалення чужих реакцій (Manage Messages).")
+        except Exception as e:
+            print(f"Помилка при видаленні реакції: {e}")
 async def on_ready():
     global MONITORING_STARTED
     if MONITORING_STARTED: return
@@ -998,4 +1050,5 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
