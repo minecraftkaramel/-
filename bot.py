@@ -7,6 +7,7 @@ import logging
 import re
 import random
 import io
+import time  # ДОДАНО ДЛЯ ТАЙМЕРА
 from pathlib import Path
 from itertools import cycle
 from datetime import datetime, timezone
@@ -38,6 +39,7 @@ client = discord.Client(intents=intents)
 AIRPORTS_DB = {}
 # 🔥 Глобальна змінна-запобіжник від дублікатів
 MONITORING_STARTED = False
+LAST_TRAFFIC_TIME = 0.0  # ЗМІННА ДЛЯ ТАЙМЕРА !traffic
 # 🆕 Змінна для збереження останнього повідомлення
 last_sent_message = None
 
@@ -447,7 +449,7 @@ async def on_message(message):
         return
     # --------------------------------------------------------
 
-# --- 🧹 КОМАНДА: !clearwow <ID> (ОЧИСТИТИ ВСІ РЕАКЦІЇ) ---
+    # --- 🧹 КОМАНДА: !clearwow <ID> (ОЧИСТИТИ ВСІ РЕАКЦІЇ) ---
     if message.content.startswith("!clearwow"):
         if not is_admin: return await message.channel.send("🚫 **Access Denied**")
         parts = message.content.split()
@@ -699,14 +701,99 @@ async def on_message(message):
         return
     # ------------------------------------------------------------
 
+    # --- 📡 КОМАНДА: !traffic (ПОКАЗАТИ АКТИВНІ РЕЙСИ) ---
+    if message.content == "!traffic":
+        global LAST_TRAFFIC_TIME
+        current_time = time.time()
+        
+        # Перевірка на 10-секундну затримку
+        if current_time - LAST_TRAFFIC_TIME < 10:
+            remaining = int(10 - (current_time - LAST_TRAFFIC_TIME))
+            warning_msg = await message.channel.send(f"⏳ **Please wait {remaining} seconds** before requesting traffic again.")
+            await asyncio.sleep(3)
+            try:
+                await warning_msg.delete()
+            except:
+                pass
+            return
+            
+        LAST_TRAFFIC_TIME = current_time
+        
+        # Відправляємо тимчасове повідомлення
+        msg = await message.channel.send("🔄 **Fetching live traffic data...**")
+        
+        async with aiohttp.ClientSession() as session:
+            ongoing = await fetch_api(session, "/flights/ongoing")
+            
+            # Якщо рейсів немає
+            if not ongoing or "results" not in ongoing or len(ongoing["results"]) == 0:
+                embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic", description="🛬 Наразі небо чисте, активних рейсів немає.", color=0xf1c40f)
+                return await msg.edit(content=None, embed=embed)
+            
+            # Збираємо рядки для кожного рейсу
+            desc_lines = []
+            for f in ongoing["results"]:
+                cs = f.get("flightNumber") or f.get("callsign") or "N/A"
+                airline = f.get("airline", {}).get("icao", "")
+                full_cs = f"{airline} {cs}".strip() if airline else cs
+                
+                pilot_data = f.get("pilot", {})
+                pilot = pilot_data.get("fullname", "Unknown Pilot") if isinstance(pilot_data, dict) else "Unknown Pilot"
+                
+                ac_data = f.get("aircraft", {})
+                ac = "A/C"
+                if isinstance(ac_data, dict):
+                    ac = ac_data.get("airframe", {}).get("name") or ac_data.get("icao") or "A/C"
+                
+                dep = f.get("dep", {}).get("icao", "???") if isinstance(f.get("dep"), dict) else "???"
+                arr = f.get("arr", {}).get("icao", "???") if isinstance(f.get("arr"), dict) else "???"
+                
+                # Формуємо красивий мінімалістичний рядок
+                desc_lines.append(f"`{full_cs}` • {pilot} • `{ac}` • {dep} ➔ {arr}")
+            
+            # Створюємо фінальний Ембед
+            embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic", description="\n".join(desc_lines), color=0x3498db)
+            
+            # Додаємо час оновлення знизу
+            current_utc_time = datetime.now(timezone.utc).strftime('%H:%M')
+            embed.set_footer(text=f"🔄 Оновлено: {current_utc_time} UTC | Newsky API")
+            
+            # Замінюємо "Fetching..." на готову картку
+            await msg.edit(content=None, embed=embed)
+        return
+    # -------------------------------------------------------------
+
+    # --- 📚 КОМАНДА: !help (ДИНАМІЧНА ДЛЯ КОРИСТУВАЧІВ ТА АДМІНІВ) ---
     if message.content == "!help":
         embed = discord.Embed(title="📚 Bot Commands", color=0x3498db)
-        desc = "**🔹 User Commands:**\n**`!help`** — Show this list\n\n"
-        desc += "**🔒 Admin / System (Restricted):**\n**`!status`** — System status\n**`!test [min]`** — Run test scenarios\n**`!spy <ID>`** — Dump flight JSON\n**`!msg [ID] <text>`** — Send text message\n**`!reply <ID> <text>`** — Reply to a message\n**`!undo`** — Delete last !msg or !reply\n**`!wow <ID> <emoji>`** — React to message\n**`!unwow <ID> <emoji>`** — Remove reaction\n**`!cache`** — Download sent.json memory\n\n"
-        desc += "**🎭 Status Management (Admin):**\n**`!next`** — Force next status\n**`!addstatus <type> <text>`** — Save & Add status\n**`!delstatus [num]`** — Delete status\n"
+        
+        # Це бачать УСІ користувачі
+        desc = "**🔹 User Commands:**\n"
+        desc += "**`!help`** — Show this list\n"
+        desc += "**`!traffic`** — Live radar (active flights)\n\n"
+        
+        # Це додається ТІЛЬКИ якщо користувач — адмін
+        if is_admin:
+            desc += "**🔒 Admin / System (Restricted):**\n"
+            desc += "**`!status`** — System status\n"
+            desc += "**`!test [min]`** — Run test scenarios\n"
+            desc += "**`!spy <ID>`** — Dump flight JSON\n"
+            desc += "**`!msg [ID] <text>`** — Send text message\n"
+            desc += "**`!reply <ID> <text>`** — Reply to a message\n"
+            desc += "**`!undo`** — Delete last !msg or !reply\n"
+            desc += "**`!wow <ID> <emoji>`** — React to message\n"
+            desc += "**`!unwow <ID> <emoji>`** — Remove reaction\n"
+            desc += "**`!clearwow <ID>`** — Clear all reactions\n"
+            desc += "**`!cache`** — Download sent.json memory\n\n"
+            desc += "**🎭 Status Management (Admin):**\n"
+            desc += "**`!next`** — Force next status\n"
+            desc += "**`!addstatus <type> <text>`** — Save & Add status\n"
+            desc += "**`!delstatus [num]`** — Delete status\n"
+            
         embed.description = desc
         await message.channel.send(embed=embed)
         return
+    # ----------------------------------------------------------------
     
     if message.content == "!next":
         if not is_admin: return await message.channel.send("🚫 **Access Denied**")
@@ -858,7 +945,7 @@ async def main_loop():
                         # --- ЛОГІКА ДЛЯ ЗАКРИТИХ ТА ВИДАЛЕНИХ РЕЙСІВ ---
                         if raw_f.get("close"):
                             print(f"⏳ Waiting for calculation: {fid}")
-                            await asyncio.sleep(10)
+                            await asyncio.sleep(3)
                             
                             det = await fetch_api(session, f"/flight/{fid}")
                             if not det or "flight" not in det: continue
@@ -912,5 +999,3 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
-
-
