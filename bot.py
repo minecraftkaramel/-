@@ -1015,7 +1015,6 @@ async def main_loop():
             
             await asyncio.sleep(CHECK_INTERVAL)
 
-@client.event
 # --- ⚡ РАДАР РЕАКЦІЙ (МИТТЄВЕ ВИДАЛЕННЯ) ---
 @client.event
 async def on_raw_reaction_add(payload):
@@ -1030,15 +1029,21 @@ async def on_raw_reaction_add(payload):
             if not channel: return
             
             message = await channel.fetch_message(payload.message_id)
-            user = client.get_user(payload.user_id)
-            if not user: return
+            
+            # 🔥 ВИПРАВЛЕНО: Беремо юзера правильно, без звернення до порожнього кешу
+            user = payload.member
+            if not user:
+                user = await client.fetch_user(payload.user_id)
             
             # Миттєво стираємо реакцію хулігана
             await message.remove_reaction(payload.emoji, user)
         except discord.Forbidden:
-            print("Немає прав на видалення чужих реакцій (Manage Messages).")
+            print("⚠️ Помилка: Бот не має права 'Manage Messages' (Керування повідомленнями) на сервері!")
         except Exception as e:
             print(f"Помилка при видаленні реакції: {e}")
+
+# --- 🚀 ЗАПУСК ГОЛОВНОГО ЦИКЛУ ---
+@client.event
 async def on_ready():
     global MONITORING_STARTED
     if MONITORING_STARTED: return
@@ -1050,5 +1055,3 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
-
-
