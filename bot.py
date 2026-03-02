@@ -778,14 +778,14 @@ async def on_message(message):
                 arr = f.get("arr", {}).get("icao", "???") if isinstance(f.get("arr"), dict) else "???"
                 
                 # Формуємо красивий мінімалістичний рядок
-                desc_lines.append(f"{full_cs} • {pilot} • {ac} • {dep} ➔ {arr}")
+                desc_lines.append(f"### ✈️ **{full_cs}** • {pilot} • {ac} • **{dep}** ➔ **{arr}**")
             
             # Створюємо фінальний Ембед
             embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic", description="\n".join(desc_lines), color=0x3498db)
             
             # Додаємо час оновлення знизу
             current_utc_time = datetime.now(timezone.utc).strftime('%H:%M')
-            embed.set_footer(text=f"🔄 Оновлено: {current_utc_time} UTC | Newsky API")
+            embed.set_footer(text=f"🔄 Updated: {current_utc_time} UTC | Newsky API")
             
             # Замінюємо "Fetching..." на готову картку
             await msg.edit(content=None, embed=embed)
@@ -1055,5 +1055,6 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
