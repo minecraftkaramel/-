@@ -467,6 +467,71 @@ async def on_message(message):
         return
     # --------------------------------------------------------
 
+    # --- 📜 КОМАНДА: !audit [all/кількість] (СКАЧАТИ ЖУРНАЛ АУДИТУ) ---
+    if message.content.startswith("!audit"):
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        
+        parts = message.content.split()
+        
+        # Перевіряємо, чи юзер хоче ВСІ записи
+        fetch_limit = 50 # За замовчуванням
+        is_all = False
+        
+        if len(parts) > 1:
+            if parts[1].lower() == "all":
+                fetch_limit = None # Це змусить Discord віддати ВСЕ, що є
+                is_all = True
+            elif parts[1].isdigit():
+                fetch_limit = int(parts[1])
+
+        # Знаходимо головний сервер бота
+        main_channel = client.get_channel(CHANNEL_ID)
+        if not main_channel:
+            return await message.channel.send("❌ **Error:** Cannot find the main server. Check CHANNEL_ID.")
+        
+        guild = main_channel.guild
+        
+        if is_all:
+            await message.channel.send(f"⏳ **Збираю АБСОЛЮТНО ВСІ доступні записи (до 90 днів) з '{guild.name}'... Це може зайняти хвилину.**")
+        else:
+            await message.channel.send(f"⏳ **Збираю останні {fetch_limit} записів аудиту з '{guild.name}'...**")
+        
+        try:
+            audit_text = f"=== Журнал аудиту: {guild.name} ===\n"
+            audit_text += f"Ліміт: {'Всі доступні (до 90 днів)' if is_all else fetch_limit}\n" + "="*50 + "\n\n"
+            
+            count = 0
+            # Читаємо журнал
+            async for entry in guild.audit_logs(limit=fetch_limit):
+                time_str = entry.created_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+                user = entry.user
+                action = entry.action.name
+                target = entry.target
+                reason = entry.reason or "Не вказано"
+                
+                audit_text += f"[{time_str}] {user} -> ДІЯ: {action}\n"
+                audit_text += f"   Об'єкт: {target}\n"
+                audit_text += f"   Причина: {reason}\n"
+                audit_text += "-"*50 + "\n"
+                count += 1
+                
+            audit_text += f"\nВсього зібрано записів: {count}"
+                
+            # Створюємо файл у пам'яті
+            file_bin = io.BytesIO(audit_text.encode('utf-8'))
+            
+            await message.channel.send(
+                content=f"✅ **Готово! Знайдено {count} записів.** Ось твій звіт:", 
+                file=discord.File(file_bin, filename=f"audit_log_{'all' if is_all else fetch_limit}.txt")
+            )
+            
+        except discord.Forbidden:
+            await message.channel.send("❌ **Error:** I don't have the 'View Audit Log' (Перегляд журналу аудиту) permission.")
+        except Exception as e:
+            await message.channel.send(f"❌ **Error:** {e}")
+        return
+    # -------------------------------------------------------------
+
     # --- 🧹 КОМАНДА: !clearwow <ID> (ОЧИСТИТИ ВСІ РЕАКЦІЇ) ---
     if message.content.startswith("!clearwow"):
         if not is_admin: return await message.channel.send("🚫 **Access Denied**")
@@ -1022,5 +1087,6 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
