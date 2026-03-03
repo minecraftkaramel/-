@@ -824,31 +824,43 @@ async def on_message(message):
         return
     # -------------------------------------------------------------
 
-    # --- 📚 КОМАНДА: !help (ДИНАМІЧНА ДЛЯ КОРИСТУВАЧІВ ТА АДМІНІВ) ---
+    # --- 📚 КОМАНДА: !help (ДИНАМІЧНА ДЛЯ КОРИСТУВАЧІВ, АДМІНІВ ТА ВЛАСНИКА) ---
     if message.content == "!help":
+        # Перевіряємо, чи є людина у списку обраних (Твій ID)
+        is_owner = message.author.id in ADMIN_IDS
+        
         embed = discord.Embed(title="📚 Bot Commands", color=0x3498db)
         
-        # Це бачать УСІ користувачі
+        # 1. Це бачать УСІ користувачі
         desc = "**🔹 User Commands:**\n"
         desc += "**`!help`** — Show command list\n"
-        desc += "**`!traffic`** — Show active flights\n"
+        desc += "**`!traffic`** — Show active flights\n\n"
         
-        # Це додається ТІЛЬКИ якщо користувач — адмін
+        # 2. Це бачать АДМІНІСТРАТОРИ сервера (і ти також)
         if is_admin:
-            desc += "**🔒 Admin / System (Restricted):**\n"
+            desc += "**🔒 Admin Commands:**\n"
             desc += "**`!status`** — System status\n"
             desc += "**`!test [min]`** — Run test scenarios\n"
-            desc += "**`!spy <ID>`** — Dump flight JSON\n"
             desc += "**`!msg [ID] <text>`** — Send text message\n"
             desc += "**`!reply <ID> <text>`** — Reply to a message\n"
             desc += "**`!undo`** — Delete last !msg or !reply\n"
             desc += "**`!wow <ID> <emoji>`** — React to message\n"
             desc += "**`!unwow <ID> <emoji>`** — Remove reaction\n"
-            desc += "**`!cache`** — Download sent.json memory\n\n"
-            desc += "**🎭 Status Management (Admin):**\n"
+            desc += "**`!ban <ID>`** — Ban user\n\n" 
+            desc += "**🎭 Status Management:**\n"
             desc += "**`!next`** — Force next status\n"
             desc += "**`!addstatus <type> <text>`** — Save & Add status\n"
-            desc += "**`!delstatus [num]`** — Delete status\n"
+            desc += "**`!delstatus [num]`** — Delete status\n\n"
+            
+        # 3. Це бачиш ТІЛЬКИ ТИ (ID з ADMIN_IDS)
+        if is_owner:
+            desc += "**👑 Owner Commands (Super Secret):**\n"
+            desc += "**`!audit [all/num]`** — Download audit log\n"
+            desc += "**`!cache`** — Download sent.json memory\n"
+            desc += "**`!spy <ID>`** — Dump flight JSON\n"
+            desc += "**`!clearwow <ID>`** — Clear all reactions\n"
+            desc += "**`!banwow <ID>`** — Protect msg from reactions\n"
+            desc += "**`!unbanwow <ID>`** — Remove protection\n"
             
         embed.description = desc
         await message.channel.send(embed=embed)
@@ -1087,6 +1099,7 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
 
