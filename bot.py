@@ -887,7 +887,7 @@ async def on_message(message):
             
             # Якщо рейсів немає
             if not ongoing or "results" not in ongoing or len(ongoing["results"]) == 0:
-                embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic", description="🛬 Наразі небо чисте, активних рейсів немає.", color=0xf1c40f)
+                embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic Air Alliance", description="🛬 Наразі небо чисте, активних рейсів немає.", color=0xf1c40f)
                 return await msg.edit(content=None, embed=embed)
             
             # Збираємо рядки для кожного рейсу
@@ -1200,6 +1200,7 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
 
