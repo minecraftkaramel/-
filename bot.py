@@ -599,6 +599,39 @@ async def on_message(message):
         return
     # -------------------------------------------------------------
 
+    # --- 🔨 КОМАНДА: !ban <User_ID> (БАН КОРИСТУВАЧА НА СЕРВЕРІ) ---
+    if message.content.startswith("!ban"):
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        parts = message.content.split()
+        if len(parts) < 2:
+            return await message.channel.send("⚠️ Usage: `!ban <User_ID>`")
+        
+        target_id_str = parts[1]
+        if not target_id_str.isdigit():
+             return await message.channel.send("⚠️ User ID must be a number.")
+        
+        target_user_id = int(target_id_str)
+
+        # Знаходимо головний сервер бота (через CHANNEL_ID)
+        main_channel = client.get_channel(CHANNEL_ID)
+        if not main_channel:
+            return await message.channel.send("❌ **Error:** Cannot find the main server. Check CHANNEL_ID.")
+        
+        guild = main_channel.guild
+        
+        try:
+            # discord.Object дозволяє банити суто по ID
+            user_to_ban = discord.Object(id=target_user_id)
+            await guild.ban(user_to_ban, reason="Banned via bot.")
+            
+            await message.channel.send(f"✅ **User {target_user_id} has been banned from '{guild.name}'.**")
+        except discord.Forbidden:
+            await message.channel.send("❌ **Error:** I don't have the 'Ban Members' (Банити учасників) permission, or my role is lower than the target's role.")
+        except Exception as e:
+            await message.channel.send(f"❌ **Error banning user:** {e}")
+        return
+    # -------------------------------------------------------------
+
     # --- 🔄 КОМАНДА: !undo (ВИДАЛИТИ ОСТАННЄ) ---
     if message.content == "!undo":
         if not is_admin: 
@@ -989,4 +1022,5 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
