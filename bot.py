@@ -467,6 +467,71 @@ async def on_message(message):
         return
     # --------------------------------------------------------
 
+    # --- 🎭 КОМАНДА: !fake <ID_користувача> <текст> (ВЕБХУК-ДВІЙНИК) ---
+    if message.content.startswith("!fake"):
+        # Команду може використовувати тільки адмін
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        
+        # Розбиваємо повідомлення максимум на 3 частини (команда, ID, весь інший текст)
+        parts = message.content.split(maxsplit=2)
+        if len(parts) < 3:
+            return await message.channel.send("⚠️ Використання: `!fake <User_ID> <текст>`")
+            
+        target_id_str = parts[1]
+        if not target_id_str.isdigit():
+             return await message.channel.send("⚠️ ID користувача має бути числом.")
+             
+        target_id = int(target_id_str)
+        fake_text = parts[2]
+        
+        try:
+            # 🥷 СТЕЛС-РЕЖИМ: Миттєво видаляємо твоє повідомлення з командою
+            await message.delete()
+        except:
+            pass # Якщо ми пишемо в приват боту, видалити не вийде, просто ігноруємо
+            
+        try:
+            # Шукаємо ціль на сервері (щоб взяти саме серверний нікнейм)
+            target_user = message.guild.get_member(target_id)
+            # Якщо людини немає на сервері, шукаємо її глобально
+            if not target_user:
+                target_user = await client.fetch_user(target_id)
+                
+            if not target_user:
+                return await message.channel.send("❌ **Користувача не знайдено.**")
+                
+            # Витягуємо ім'я (якщо є серверний нікнейм - беремо його, інакше глобальне)
+            fake_name = getattr(target_user, 'display_name', target_user.name)
+            
+            # Витягуємо аватарку (якщо немає своєї - беремо стандартну діскордівську)
+            if target_user.display_avatar:
+                fake_avatar_url = target_user.display_avatar.url
+            else:
+                fake_avatar_url = target_user.default_avatar.url
+
+            # Шукаємо існуючий вебхук бота в цьому каналі, щоб не створювати купу нових
+            webhooks = await message.channel.webhooks()
+            webhook = discord.utils.get(webhooks, name="ShadowBot Webhook")
+            
+            # Якщо вебхука ще немає — створюємо його
+            if not webhook:
+                webhook = await message.channel.create_webhook(name="ShadowBot Webhook")
+                
+            # 🚀 ВІДПРАВЛЯЄМО ПОВІДОМЛЕННЯ ВІД ІМЕНІ ДВІЙНИКА
+            await webhook.send(
+                content=fake_text,
+                username=fake_name,
+                avatar_url=fake_avatar_url
+            )
+            
+        except discord.Forbidden:
+            # Щоб це працювало, у бота має бути право "Керування вебхуками" (Manage Webhooks) на сервері
+            await message.author.send("❌ **Помилка:** У бота немає прав 'Керування вебхуками' (Manage Webhooks) у цьому каналі.")
+        except Exception as e:
+            await message.author.send(f"❌ **Помилка:** {e}")
+        return
+    # -------------------------------------------------------------
+
     # --- 📜 КОМАНДА: !audit [all/кількість] (СКАЧАТИ ЖУРНАЛ АУДИТУ) ---
     if message.content.startswith("!audit"):
         if not is_admin: return await message.channel.send("🚫 **Access Denied**")
@@ -677,7 +742,7 @@ async def on_message(message):
         
         target_user_id = int(target_id_str)
 
-        # Знаходимо головний сервер бота (через CHANNEL_ID)
+        # Знаходимо головний сервер бота
         main_channel = client.get_channel(CHANNEL_ID)
         if not main_channel:
             return await message.channel.send("❌ **Error:** Cannot find the main server. Check CHANNEL_ID.")
@@ -685,15 +750,49 @@ async def on_message(message):
         guild = main_channel.guild
         
         try:
-            # discord.Object дозволяє банити суто по ID
             user_to_ban = discord.Object(id=target_user_id)
-            await guild.ban(user_to_ban, reason="Banned via bot.")
+            # 🔥 ВИПРАВЛЕНО: delete_message_seconds=0 гарантує, що історія не зникне
+            await guild.ban(user_to_ban, reason="Banned via bot.", delete_message_seconds=0)
             
-            await message.channel.send(f"✅ **User {target_user_id} has been banned from '{guild.name}'.**")
+            await message.channel.send(f"✅ **User {target_user_id} has been banned from '{guild.name}'.** (Messages kept)")
         except discord.Forbidden:
             await message.channel.send("❌ **Error:** I don't have the 'Ban Members' (Банити учасників) permission, or my role is lower than the target's role.")
         except Exception as e:
             await message.channel.send(f"❌ **Error banning user:** {e}")
+        return
+    # -------------------------------------------------------------
+
+    # --- 🕊️ КОМАНДА: !unban <User_ID> (РОЗБАН КОРИСТУВАЧА) ---
+    if message.content.startswith("!unban"):
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        parts = message.content.split()
+        if len(parts) < 2:
+            return await message.channel.send("⚠️ Usage: `!unban <User_ID>`")
+        
+        target_id_str = parts[1]
+        if not target_id_str.isdigit():
+             return await message.channel.send("⚠️ User ID must be a number.")
+        
+        target_user_id = int(target_id_str)
+
+        # Знаходимо головний сервер бота
+        main_channel = client.get_channel(CHANNEL_ID)
+        if not main_channel:
+            return await message.channel.send("❌ **Error:** Cannot find the main server.")
+        
+        guild = main_channel.guild
+        
+        try:
+            user_to_unban = discord.Object(id=target_user_id)
+            await guild.unban(user_to_unban, reason="Unbanned via bot.")
+            
+            await message.channel.send(f"✅ **User {target_user_id} has been unbanned in '{guild.name}'.**")
+        except discord.NotFound:
+            await message.channel.send(f"⚠️ **User {target_user_id} is not banned on this server.**")
+        except discord.Forbidden:
+            await message.channel.send("❌ **Error:** I don't have the 'Ban Members' permission.")
+        except Exception as e:
+            await message.channel.send(f"❌ **Error unbanning user:** {e}")
         return
     # -------------------------------------------------------------
 
@@ -846,7 +945,8 @@ async def on_message(message):
             desc += "**`!undo`** — Delete last !msg or !reply\n"
             desc += "**`!wow <ID> <emoji>`** — React to message\n"
             desc += "**`!unwow <ID> <emoji>`** — Remove reaction\n"
-            desc += "**`!ban <ID>`** — Ban user\n\n" 
+            desc += "**`!ban <ID>`** — Ban user\n\n"
+            desc += "**`!unban <ID>`** — unban user\n\n" 
             desc += "**🎭 Status Management:**\n"
             desc += "**`!next`** — Force next status\n"
             desc += "**`!addstatus <type> <text>`** — Save & Add status\n"
@@ -861,6 +961,7 @@ async def on_message(message):
             desc += "**`!clearwow <ID>`** — Clear all reactions\n"
             desc += "**`!banwow <ID>`** — Protect msg from reactions\n"
             desc += "**`!unbanwow <ID>`** — Remove protection\n"
+            desc += "**`!fake <id> <text>\n"
             
         embed.description = desc
         await message.channel.send(embed=embed)
@@ -1099,6 +1200,7 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
 
