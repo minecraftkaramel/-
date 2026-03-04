@@ -7,7 +7,7 @@ import logging
 import re
 import random
 import io
-import time  # ДОДАНО ДЛЯ ТАЙМЕРА
+import time
 from pathlib import Path
 from itertools import cycle
 from datetime import datetime, timezone
@@ -25,7 +25,7 @@ START_TIME = datetime.now(timezone.utc)
 
 STATE_FILE = Path("sent.json")
 STATUS_FILE = Path("statuses.json") 
-CHECK_INTERVAL = 30 # Інтервал перевірки в секундах
+CHECK_INTERVAL = 30
 BASE_URL = "https://newsky.app/api/airline-api"
 AIRPORTS_DB_URL = "https://raw.githubusercontent.com/mwgg/Airports/master/airports.json"
 HEADERS = {"Authorization": f"Bearer {NEWSKY_API_KEY}"}
@@ -35,14 +35,10 @@ intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
-# Глобальна змінна для бази
 AIRPORTS_DB = {}
-# 🆕 Чорний список для заборони реакцій (в оперативній пам'яті)
 BANNED_WOW_MESSAGES = set()
-# 🔥 Глобальна змінна-запобіжник від дублікатів
 MONITORING_STARTED = False
-LAST_TRAFFIC_TIME = 0.0  # ЗМІННА ДЛЯ ТАЙМЕРА !traffic
-# 🆕 Змінна для збереження останнього повідомлення
+LAST_TRAFFIC_TIME = 0.0
 last_sent_message = None
 
 # ---------- ДОПОМІЖНІ ФУНКЦІЇ ----------
@@ -133,7 +129,7 @@ def format_airport_string(icao, api_name):
         name = db_data.get("name", "") or ""
         country = db_data.get("country", "XX")
         
-        # 🔥 ВИПРАВЛЕННЯ НАЗВ МІСТ (СЛОВНИК) 🔥
+        # ВИПРАВЛЕННЯ НАЗВ МІСТ
         CITY_FIXES = {
             "Kiev": "Kyiv",
             "Dnipropetrovsk": "Dnipro",
@@ -244,7 +240,7 @@ async def send_flight_message(channel, status, f, details_type="ongoing"):
     else:
         flight_url = f"https://newsky.app/map/{fid}"
 
-    # --- ✈️ ВИЗНАЧЕННЯ ТИПУ РЕЙСУ (СМАЙЛИК) ---
+    # ---  ВИЗНАЧЕННЯ ТИПУ РЕЙСУ (СМАЙЛИК) ---
     if f.get("schedule"):
         type_emoji = "<:schedule:1468002863740616804>"
     else:
@@ -274,7 +270,7 @@ async def send_flight_message(channel, status, f, details_type="ongoing"):
     
     flight_type = f.get("type", "pax")
     
-    # --- 🔥 ВИПРАВЛЕННЯ ВАГИ ВАНТАЖУ (ТІЛЬКИ З JSON) 🔥 ---
+    # --- ВИПРАВЛЕННЯ ВАГИ ВАНТАЖУ ---
     cargo_kg = int(f.get("payload", {}).get("weights", {}).get("cargo", 0))
 
     if flight_type == "cargo":
@@ -288,11 +284,9 @@ async def send_flight_message(channel, status, f, details_type="ongoing"):
     if status == "Departed":
         delay = f.get("delay", 0)
         
-        # --- 🚕 РОЗРАХУНОК TAXI TIME ---
+        # --- РОЗРАХУНОК TAXI TIME ---
         taxi_str = ""
         try:
-            # Newsky дає час у форматі ISO 8601 (наприклад, 2026-02-07T20:29:33.360Z)
-            # Беремо час відправлення від гейту і час зльоту
             t_gate_str = f.get("depTimeAct")
             t_air_str = f.get("takeoffTimeAct")
             
@@ -467,89 +461,22 @@ async def on_message(message):
         return
     # --------------------------------------------------------
 
-    # --- 🎭 КОМАНДА: !fake <ID_користувача> <текст> (ВЕБХУК-ДВІЙНИК) ---
-    if message.content.startswith("!fake"):
-        # Команду може використовувати тільки адмін
-        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
-        
-        # Розбиваємо повідомлення максимум на 3 частини (команда, ID, весь інший текст)
-        parts = message.content.split(maxsplit=2)
-        if len(parts) < 3:
-            return await message.channel.send("⚠️ Використання: `!fake <User_ID> <текст>`")
-            
-        target_id_str = parts[1]
-        if not target_id_str.isdigit():
-             return await message.channel.send("⚠️ ID користувача має бути числом.")
-             
-        target_id = int(target_id_str)
-        fake_text = parts[2]
-        
-        try:
-            # 🥷 СТЕЛС-РЕЖИМ: Миттєво видаляємо твоє повідомлення з командою
-            await message.delete()
-        except:
-            pass # Якщо ми пишемо в приват боту, видалити не вийде, просто ігноруємо
-            
-        try:
-            # Шукаємо ціль на сервері (щоб взяти саме серверний нікнейм)
-            target_user = message.guild.get_member(target_id)
-            # Якщо людини немає на сервері, шукаємо її глобально
-            if not target_user:
-                target_user = await client.fetch_user(target_id)
-                
-            if not target_user:
-                return await message.channel.send("❌ **Користувача не знайдено.**")
-                
-            # Витягуємо ім'я (якщо є серверний нікнейм - беремо його, інакше глобальне)
-            fake_name = getattr(target_user, 'display_name', target_user.name)
-            
-            # Витягуємо аватарку (якщо немає своєї - беремо стандартну діскордівську)
-            if target_user.display_avatar:
-                fake_avatar_url = target_user.display_avatar.url
-            else:
-                fake_avatar_url = target_user.default_avatar.url
-
-            # Шукаємо існуючий вебхук бота в цьому каналі, щоб не створювати купу нових
-            webhooks = await message.channel.webhooks()
-            webhook = discord.utils.get(webhooks, name="ShadowBot Webhook")
-            
-            # Якщо вебхука ще немає — створюємо його
-            if not webhook:
-                webhook = await message.channel.create_webhook(name="ShadowBot Webhook")
-                
-            # 🚀 ВІДПРАВЛЯЄМО ПОВІДОМЛЕННЯ ВІД ІМЕНІ ДВІЙНИКА
-            await webhook.send(
-                content=fake_text,
-                username=fake_name,
-                avatar_url=fake_avatar_url
-            )
-            
-        except discord.Forbidden:
-            # Щоб це працювало, у бота має бути право "Керування вебхуками" (Manage Webhooks) на сервері
-            await message.author.send("❌ **Помилка:** У бота немає прав 'Керування вебхуками' (Manage Webhooks) у цьому каналі.")
-        except Exception as e:
-            await message.author.send(f"❌ **Помилка:** {e}")
-        return
-    # -------------------------------------------------------------
-
     # --- 📜 КОМАНДА: !audit [all/кількість] (СКАЧАТИ ЖУРНАЛ АУДИТУ) ---
     if message.content.startswith("!audit"):
         if not is_admin: return await message.channel.send("🚫 **Access Denied**")
         
         parts = message.content.split()
         
-        # Перевіряємо, чи юзер хоче ВСІ записи
-        fetch_limit = 50 # За замовчуванням
+        fetch_limit = 50
         is_all = False
         
         if len(parts) > 1:
             if parts[1].lower() == "all":
-                fetch_limit = None # Це змусить Discord віддати ВСЕ, що є
+                fetch_limit = None
                 is_all = True
             elif parts[1].isdigit():
                 fetch_limit = int(parts[1])
 
-        # Знаходимо головний сервер бота
         main_channel = client.get_channel(CHANNEL_ID)
         if not main_channel:
             return await message.channel.send("❌ **Error:** Cannot find the main server. Check CHANNEL_ID.")
@@ -566,7 +493,6 @@ async def on_message(message):
             audit_text += f"Ліміт: {'Всі доступні (до 90 днів)' if is_all else fetch_limit}\n" + "="*50 + "\n\n"
             
             count = 0
-            # Читаємо журнал
             async for entry in guild.audit_logs(limit=fetch_limit):
                 time_str = entry.created_at.strftime("%Y-%m-%d %H:%M:%S UTC")
                 user = entry.user
@@ -582,7 +508,6 @@ async def on_message(message):
                 
             audit_text += f"\nВсього зібрано записів: {count}"
                 
-            # Створюємо файл у пам'яті
             file_bin = io.BytesIO(audit_text.encode('utf-8'))
             
             await message.channel.send(
@@ -742,7 +667,6 @@ async def on_message(message):
         
         target_user_id = int(target_id_str)
 
-        # Знаходимо головний сервер бота
         main_channel = client.get_channel(CHANNEL_ID)
         if not main_channel:
             return await message.channel.send("❌ **Error:** Cannot find the main server. Check CHANNEL_ID.")
@@ -751,7 +675,6 @@ async def on_message(message):
         
         try:
             user_to_ban = discord.Object(id=target_user_id)
-            # 🔥 ВИПРАВЛЕНО: delete_message_seconds=0 гарантує, що історія не зникне
             await guild.ban(user_to_ban, reason="Banned via bot.", delete_message_seconds=0)
             
             await message.channel.send(f"✅ **User {target_user_id} has been banned from '{guild.name}'.** (Messages kept)")
@@ -774,8 +697,6 @@ async def on_message(message):
              return await message.channel.send("⚠️ User ID must be a number.")
         
         target_user_id = int(target_id_str)
-
-        # Знаходимо головний сервер бота
         main_channel = client.get_channel(CHANNEL_ID)
         if not main_channel:
             return await message.channel.send("❌ **Error:** Cannot find the main server.")
@@ -865,8 +786,7 @@ async def on_message(message):
     if message.content == "!traffic":
         global LAST_TRAFFIC_TIME
         current_time = time.time()
-        
-        # Перевірка на 10-секундну затримку
+
         if current_time - LAST_TRAFFIC_TIME < 10:
             remaining = int(10 - (current_time - LAST_TRAFFIC_TIME))
             warning_msg = await message.channel.send(f"⏳ **Please wait {remaining} seconds** before requesting traffic again.")
@@ -879,18 +799,15 @@ async def on_message(message):
             
         LAST_TRAFFIC_TIME = current_time
         
-        # Відправляємо тимчасове повідомлення
         msg = await message.channel.send("🔄 **Fetching live traffic data...**")
         
         async with aiohttp.ClientSession() as session:
             ongoing = await fetch_api(session, "/flights/ongoing")
             
-            # Якщо рейсів немає
             if not ongoing or "results" not in ongoing or len(ongoing["results"]) == 0:
                 embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic Air Alliance", description="🛬 Наразі небо чисте, активних рейсів немає.", color=0xf1c40f)
                 return await msg.edit(content=None, embed=embed)
             
-            # Збираємо рядки для кожного рейсу
             desc_lines = []
             for f in ongoing["results"]:
                 cs = f.get("flightNumber") or f.get("callsign") or "N/A"
@@ -908,17 +825,13 @@ async def on_message(message):
                 dep = f.get("dep", {}).get("icao", "???") if isinstance(f.get("dep"), dict) else "???"
                 arr = f.get("arr", {}).get("icao", "???") if isinstance(f.get("arr"), dict) else "???"
                 
-                # Формуємо красивий мінімалістичний рядок
                 desc_lines.append(f"{full_cs} • {pilot} • {ac} • {dep} ➔ {arr}")
             
-            # Створюємо фінальний Ембед
             embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic Air Alliance", description="\n".join(desc_lines), color=0x3498db)
             
-            # Додаємо час оновлення знизу
             current_utc_time = datetime.now(timezone.utc).strftime('%H:%M')
             embed.set_footer(text=f"🔄 Updated: {current_utc_time} UTC | Newsky API")
             
-            # Замінюємо "Fetching..." на готову картку
             await msg.edit(content=None, embed=embed)
         return
     # -------------------------------------------------------------
@@ -961,7 +874,6 @@ async def on_message(message):
             desc += "**`!clearwow <ID>`** — Clear all reactions\n"
             desc += "**`!banwow <ID>`** — Protect msg from reactions\n"
             desc += "**`!unbanwow <ID>`** — Remove protection\n"
-            desc += "**`!fake <id> <text>\n"
             
         embed.description = desc
         await message.channel.send(embed=embed)
@@ -1163,11 +1075,9 @@ async def main_loop():
 # --- ⚡ РАДАР РЕАКЦІЙ (МИТТЄВЕ ВИДАЛЕННЯ) ---
 @client.event
 async def on_raw_reaction_add(payload):
-    # Ігноруємо реакції самого бота (щоб він міг ставити смайли)
     if payload.user_id == client.user.id:
         return
 
-    # Перевіряємо, чи є ID повідомлення у нашому чорному списку
     if payload.message_id in BANNED_WOW_MESSAGES:
         try:
             channel = client.get_channel(payload.channel_id)
@@ -1175,12 +1085,10 @@ async def on_raw_reaction_add(payload):
             
             message = await channel.fetch_message(payload.message_id)
             
-            # 🔥 ВИПРАВЛЕНО: Беремо юзера правильно, без звернення до порожнього кешу
             user = payload.member
             if not user:
                 user = await client.fetch_user(payload.user_id)
-            
-            # Миттєво стираємо реакцію хулігана
+
             await message.remove_reaction(payload.emoji, user)
         except discord.Forbidden:
             print("⚠️ Помилка: Бот не має права 'Manage Messages' (Керування повідомленнями) на сервері!")
@@ -1200,9 +1108,3 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
-
-
-
-
-
-
