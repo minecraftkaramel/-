@@ -805,7 +805,7 @@ async def on_message(message):
             ongoing = await fetch_api(session, "/flights/ongoing")
             
             if not ongoing or "results" not in ongoing or len(ongoing["results"]) == 0:
-                embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic Air Alliance", description="🛬 Наразі небо чисте, активних рейсів немає.", color=0xf1c40f)
+                embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic Air Alliance", description="🛬 No active flights.", color=0xf1c40f)
                 return await msg.edit(content=None, embed=embed)
             
             desc_lines = []
@@ -1108,3 +1108,4 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
