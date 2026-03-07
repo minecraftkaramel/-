@@ -441,18 +441,6 @@ async def on_message(message):
     global last_sent_message
     
     if message.author == client.user: return
-
-    # --- 🕵️ ПЕРЕХОПЛЕННЯ ПП ---
-    if isinstance(message.channel, discord.DMChannel):
-        if message.author.id in ADMIN_IDS:
-            pass
-        else:
-            try:
-                owner = await client.fetch_user(ADMIN_IDS[0])
-                await owner.send(f"🕵️ **Intercepted DM from {message.author.mention} ({message.author.name}):**\n{message.content}")
-            except Exception as e:
-                print(f"DM Intercept Error: {e}")
-
     is_admin = False
     if message.author.id in ADMIN_IDS:
         is_admin = True
@@ -848,72 +836,9 @@ async def on_message(message):
         return
     # -------------------------------------------------------------
 
-    # --- 🎤 КОМАНДА: !enter <Channel_ID> (Зайти в голосовий канал) ---
-    if message.content.startswith("!enter"):
-        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
-        parts = message.content.split()
-        if len(parts) < 2 or not parts[1].isdigit():
-            return await message.channel.send("⚠️ Usage: `!enter <Voice_Channel_ID>`")
-
-        vc_id = int(parts[1])
-        target_vc = client.get_channel(vc_id)
-
-        if not target_vc or not isinstance(target_vc, discord.VoiceChannel):
-            return await message.channel.send("❌ **Error:** Voice channel with this ID not found.")
-
-        guild = target_vc.guild
-
-        if guild.voice_client:
-            await guild.voice_client.disconnect()
-
-        try:
-            await target_vc.connect()
-            await message.channel.send(f"✅ **Bot joined channel:** {target_vc.name}")
-        except Exception as e:
-            await message.channel.send(f"❌ **Error:** {e}\n*(Make sure `PyNaCl` is in your requirements.txt)*")
-        return
-    # -------------------------------------------------------------
-
-    # --- 🔇 КОМАНДА: !mute (Замутити/Розмутити бота) ---
-    if message.content == "!mute":
-        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
-
-        main_channel = client.get_channel(CHANNEL_ID)
-        guild = message.guild if message.guild else (main_channel.guild if main_channel else None)
-        
-        if not guild or not guild.voice_client:
-            return await message.channel.send("⚠️ **Bot is not currently in any voice channel.**")
-
-        bot_voice_state = guild.me.voice
-        current_mute = bot_voice_state.self_mute if bot_voice_state else False
-        new_mute_state = not current_mute
-
-        try:
-            await guild.change_voice_state(channel=guild.voice_client.channel, self_mute=new_mute_state)
-            status_text = "🔇 **Bot microphone MUTED.**" if new_mute_state else "🔊 **Bot microphone UNMUTED.**"
-            await message.channel.send(f"✅ {status_text}")
-        except Exception as e:
-            await message.channel.send(f"❌ **Error:** {e}")
-        return
-    # -------------------------------------------------------------
-
-    # --- 🚪 КОМАНДА: !leave (Вийти з голосового) ---
-    if message.content == "!leave":
-        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
-
-        main_channel = client.get_channel(CHANNEL_ID)
-        guild = message.guild if message.guild else (main_channel.guild if main_channel else None)
-
-        if guild and guild.voice_client:
-            await guild.voice_client.disconnect()
-            await message.channel.send("✅ **Bot left the voice channel.**")
-        else:
-            await message.channel.send("⚠️ **Bot is already not in a voice channel.**")
-        return
-    # -------------------------------------------------------------
-
     # --- 📚 КОМАНДА: !help (ДИНАМІЧНА ДЛЯ КОРИСТУВАЧІВ, АДМІНІВ ТА ВЛАСНИКА) ---
     if message.content == "!help":
+        # Перевіряємо, чи є людина у списку обраних (Твій ID)
         is_owner = message.author.id in ADMIN_IDS
         
         embed = discord.Embed(title="📚 Bot Commands", color=0x3498db)
@@ -949,9 +874,6 @@ async def on_message(message):
             desc += "**`!clearwow <ID>`** — Clear all reactions\n"
             desc += "**`!banwow <ID>`** — Protect msg from reactions\n"
             desc += "**`!unbanwow <ID>`** — Remove protection\n"
-            desc += "**`!enter <ID>`** — Enter voice channel\n"
-            desc += "**`!leave`** — Leave voice channel\n"
-            desc += "**`!mute`** — Mute/unmute microphone\n"
             
         embed.description = desc
         await message.channel.send(embed=embed)
@@ -1186,5 +1108,3 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
-
-
