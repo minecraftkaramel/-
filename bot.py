@@ -233,7 +233,7 @@ async def fetch_api(session, path, method="GET", body=None):
     except: return None
 
 # ---------- MESSAGE GENERATOR ----------
-async def send_flight_message(channel, status, f, details_type="ongoing"):
+async def send_flight_message(channel, status, f, details_type="ongoing", reply_to_id=None):
     fid = f.get("_id") or f.get("id") or "test_id"
     if status == "Completed" or status == "Cancelled":
         flight_url = f"https://newsky.app/flight/{fid}"
@@ -393,7 +393,15 @@ async def send_flight_message(channel, status, f, details_type="ongoing"):
         embed = discord.Embed(title=f"⚫ {full_cs} flight cancelled", url=flight_url, description=desc, color=0x2b2d31)
 
     if embed:
-        await channel.send(embed=embed)
+        try:
+            if reply_to_id:
+                sent_msg = await channel.send(embed=embed, reference=discord.MessageReference(message_id=reply_to_id, channel_id=CHANNEL_ID, fail_if_not_exists=False))
+            else:
+                sent_msg = await channel.send(embed=embed)
+            return sent_msg.id
+        except Exception as e:
+            print(f"Send error: {e}")
+            return None
 
 async def change_status():
     current_status = next(status_cycle)
@@ -441,6 +449,18 @@ async def on_message(message):
     global last_sent_message
     
     if message.author == client.user: return
+
+    # --- 🕵️ ПЕРЕХОПЛЕННЯ ПП ---
+    if isinstance(message.channel, discord.DMChannel):
+        if message.author.id in ADMIN_IDS:
+            pass
+        else:
+            try:
+                owner = await client.fetch_user(ADMIN_IDS[0])
+                await owner.send(f"🕵️ **Intercepted DM from {message.author.mention} ({message.author.name}):**\n{message.content}")
+            except Exception as e:
+                print(f"DM Intercept Error: {e}")
+
     is_admin = False
     if message.author.id in ADMIN_IDS:
         is_admin = True
@@ -654,18 +674,20 @@ async def on_message(message):
         return
     # -------------------------------------------------------------
 
-    # --- 🔨 КОМАНДА: !ban <User_ID> (БАН КОРИСТУВАЧА НА СЕРВЕРІ) ---
-    if message.content.startswith("!ban"):
+    # --- 🔨 КОМАНДА: !ban <User_ID> [reason] (БАН КОРИСТУВАЧА НА СЕРВЕРІ) ---
+    if message.content.startswith("!ban ") or message.content == "!ban":
         if not is_admin: return await message.channel.send("🚫 **Access Denied**")
         parts = message.content.split()
         if len(parts) < 2:
-            return await message.channel.send("⚠️ Usage: `!ban <User_ID>`")
+            return await message.channel.send("⚠️ Usage: `!ban <User_ID> [reason]`")
         
         target_id_str = parts[1]
         if not target_id_str.isdigit():
              return await message.channel.send("⚠️ User ID must be a number.")
         
         target_user_id = int(target_id_str)
+
+        ban_reason = " ".join(parts[2:]) if len(parts) > 2 else None
 
         main_channel = client.get_channel(CHANNEL_ID)
         if not main_channel:
@@ -675,11 +697,12 @@ async def on_message(message):
         
         try:
             user_to_ban = discord.Object(id=target_user_id)
-            await guild.ban(user_to_ban, reason="Banned via bot.", delete_message_seconds=0)
+            await guild.ban(user_to_ban, reason=ban_reason, delete_message_seconds=0)
             
-            await message.channel.send(f"✅ **User {target_user_id} has been banned from '{guild.name}'.** (Messages kept)")
+            reason_text = f" for: {ban_reason}" if ban_reason else " (No reason provided)"
+            await message.channel.send(f"✅ **User {target_user_id} has been banned{reason_text}.** (Messages kept)")
         except discord.Forbidden:
-            await message.channel.send("❌ **Error:** I don't have the 'Ban Members' (Банити учасників) permission, or my role is lower than the target's role.")
+            await message.channel.send("❌ **Error:** I don't have the 'Ban Members' permission, or my role is lower than the target's role.")
         except Exception as e:
             await message.channel.send(f"❌ **Error banning user:** {e}")
         return
@@ -714,6 +737,46 @@ async def on_message(message):
             await message.channel.send("❌ **Error:** I don't have the 'Ban Members' permission.")
         except Exception as e:
             await message.channel.send(f"❌ **Error unbanning user:** {e}")
+        return
+    # -------------------------------------------------------------
+    
+    # --- 📋 КОМАНДА: !banlist (ПОКАЗАТИ СПИСОК ЗАБАНЕНИХ) ---
+    if message.content == "!banlist":
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        
+        main_channel = client.get_channel(CHANNEL_ID)
+        if not main_channel:
+            return await message.channel.send("❌ **Error:** Cannot find the main server.")
+        
+        guild = main_channel.guild
+        
+        try:
+            await message.channel.send(f"⏳ **Fetching ban list for server '{guild.name}'...**")
+            
+            ban_list_text = f"=== Ban List for Server: {guild.name} ===\n\n"
+            count = 0
+            
+            async for ban_entry in guild.bans():
+                user = ban_entry.user
+                reason = ban_entry.reason or "Not specified"
+                ban_list_text += f"User: {user} (ID: {user.id})\nReason: {reason}\n{'-'*40}\n"
+                count += 1
+                
+            if count == 0:
+                return await message.channel.send("✅ **The ban list is empty!** No banned users on this server.")
+                
+            ban_list_text += f"\nTotal banned users: {count}."
+            
+            file_bin = io.BytesIO(ban_list_text.encode('utf-8'))
+            await message.channel.send(
+                content=f"📜 **Done! Found {count} banned users.** Here is the file:", 
+                file=discord.File(file_bin, filename="banlist.txt")
+            )
+            
+        except discord.Forbidden:
+            await message.channel.send("❌ **Error:** I don't have the 'Ban Members' permission to view the ban list.")
+        except Exception as e:
+            await message.channel.send(f"❌ **Error fetching ban list:** {e}")
         return
     # -------------------------------------------------------------
 
@@ -830,15 +893,79 @@ async def on_message(message):
             embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic Air Alliance", description="\n".join(desc_lines), color=0x3498db)
             
             current_utc_time = datetime.now(timezone.utc).strftime('%H:%M')
-            embed.set_footer(text=f"🔄 Updated: {current_utc_time} UTC | Newsky API")
+            total_flights = len(ongoing["results"])
+            embed.set_footer(text=f"✈️ Active flights: {total_flights}  |  🔄 Updated: {current_utc_time} UTC  |  Newsky API")
             
             await msg.edit(content=None, embed=embed)
         return
     # -------------------------------------------------------------
 
+    # --- 🎤 КОМАНДА: !enter <Channel_ID> (Зайти в голосовий канал) ---
+    if message.content.startswith("!enter"):
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        parts = message.content.split()
+        if len(parts) < 2 or not parts[1].isdigit():
+            return await message.channel.send("⚠️ Usage: `!enter <Voice_Channel_ID>`")
+
+        vc_id = int(parts[1])
+        target_vc = client.get_channel(vc_id)
+
+        if not target_vc or not isinstance(target_vc, discord.VoiceChannel):
+            return await message.channel.send("❌ **Error:** Voice channel with this ID not found.")
+
+        guild = target_vc.guild
+
+        if guild.voice_client:
+            await guild.voice_client.disconnect()
+
+        try:
+            await target_vc.connect()
+            await message.channel.send(f"✅ **Bot joined channel:** {target_vc.name}")
+        except Exception as e:
+            await message.channel.send(f"❌ **Error:** {e}\n*(Make sure `PyNaCl` is in your requirements.txt)*")
+        return
+    # -------------------------------------------------------------
+
+    # --- 🔇 КОМАНДА: !mute (Замутити/Розмутити бота) ---
+    if message.content == "!mute":
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+
+        main_channel = client.get_channel(CHANNEL_ID)
+        guild = message.guild if message.guild else (main_channel.guild if main_channel else None)
+        
+        if not guild or not guild.voice_client:
+            return await message.channel.send("⚠️ **Bot is not currently in any voice channel.**")
+
+        bot_voice_state = guild.me.voice
+        current_mute = bot_voice_state.self_mute if bot_voice_state else False
+        new_mute_state = not current_mute
+
+        try:
+            await guild.change_voice_state(channel=guild.voice_client.channel, self_mute=new_mute_state)
+            status_text = "🔇 **Bot microphone MUTED.**" if new_mute_state else "🔊 **Bot microphone UNMUTED.**"
+            await message.channel.send(f"✅ {status_text}")
+        except Exception as e:
+            await message.channel.send(f"❌ **Error:** {e}")
+        return
+    # -------------------------------------------------------------
+
+    # --- 🚪 КОМАНДА: !leave (Вийти з голосового) ---
+    if message.content == "!leave":
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+
+        main_channel = client.get_channel(CHANNEL_ID)
+        guild = message.guild if message.guild else (main_channel.guild if main_channel else None)
+
+        if guild and guild.voice_client:
+            await guild.voice_client.disconnect()
+            await message.channel.send("✅ **Bot left the voice channel.**")
+        else:
+            await message.channel.send("⚠️ **Bot is already not in a voice channel.**")
+        return
+    # -------------------------------------------------------------
+
     # --- 📚 КОМАНДА: !help (ДИНАМІЧНА ДЛЯ КОРИСТУВАЧІВ, АДМІНІВ ТА ВЛАСНИКА) ---
     if message.content == "!help":
-        # Перевіряємо, чи є людина у списку обраних (Твій ID)
         is_owner = message.author.id in ADMIN_IDS
         
         embed = discord.Embed(title="📚 Bot Commands", color=0x3498db)
@@ -858,8 +985,9 @@ async def on_message(message):
             desc += "**`!undo`** — Delete last !msg or !reply\n"
             desc += "**`!wow <ID> <emoji>`** — React to message\n"
             desc += "**`!unwow <ID> <emoji>`** — Remove reaction\n"
-            desc += "**`!ban <ID>`** — Ban user\n\n"
-            desc += "**`!unban <ID>`** — unban user\n\n" 
+            desc += "**`!ban <ID>`** — Ban user\n"
+            desc += "**`!unban <ID>`** — unban user\n"
+            desc += "**`!banlist`** — Show banned users\n\n"
             desc += "**🎭 Status Management:**\n"
             desc += "**`!next`** — Force next status\n"
             desc += "**`!addstatus <type> <text>`** — Save & Add status\n"
@@ -874,6 +1002,9 @@ async def on_message(message):
             desc += "**`!clearwow <ID>`** — Clear all reactions\n"
             desc += "**`!banwow <ID>`** — Protect msg from reactions\n"
             desc += "**`!unbanwow <ID>`** — Remove protection\n"
+            desc += "**`!enter <ID>`** — Enter voice channel\n"
+            desc += "**`!leave`** — Leave voice channel\n"
+            desc += "**`!mute`** — Mute/unmute microphone\n"
             
         embed.description = desc
         await message.channel.send(embed=embed)
@@ -1015,8 +1146,10 @@ async def main_loop():
                         if cs == "N/A": continue
                         
                         if f.get("takeoffTimeAct") and not state[fid].get("takeoff"):
-                            await send_flight_message(channel, "Departed", f, "ongoing")
+                            msg_id = await send_flight_message(channel, "Departed", f, "ongoing")
                             state[fid]["takeoff"] = True
+                            if msg_id:
+                                state[fid]["msg_id"] = msg_id
 
                 recent = await fetch_api(session, "/flights/recent", method="POST", body={"count": 5})
                 if recent and "results" in recent:
@@ -1046,7 +1179,8 @@ async def main_loop():
                             cs = f.get("flightNumber") or f.get("callsign") or "N/A"
                             if cs == "N/A": continue
 
-                            await send_flight_message(channel, "Completed", f, "result")
+                            reply_id = state.get(fid, {}).get("msg_id")
+                            await send_flight_message(channel, "Completed", f, "result", reply_to_id=reply_id)
                             state.setdefault(fid, {})["completed"] = True
                             print(f"✅ Report Sent: {cs}")
                         
@@ -1059,7 +1193,8 @@ async def main_loop():
                             cs = f.get("flightNumber") or f.get("callsign") or "N/A"
                             if cs == "N/A": continue
 
-                            await send_flight_message(channel, "Cancelled", f, "ongoing")
+                            reply_id = state.get(fid, {}).get("msg_id")
+                            await send_flight_message(channel, "Cancelled", f, "ongoing", reply_to_id=reply_id)
                             state.setdefault(fid, {})["completed"] = True
                             print(f"⚫ Cancel Report Sent: {cs}")
 
