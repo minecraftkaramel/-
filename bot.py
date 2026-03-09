@@ -23,8 +23,8 @@ ADMIN_IDS = [
 
 START_TIME = datetime.now(timezone.utc)
 
-STATE_FILE = Path("sent.json")
-STATUS_FILE = Path("statuses.json") 
+STATE_FILE = Path("/app/data/sent.json")
+STATUS_FILE = Path("/app/data/statuses.json")
 CHECK_INTERVAL = 30
 BASE_URL = "https://newsky.app/api/airline-api"
 AIRPORTS_DB_URL = "https://raw.githubusercontent.com/mwgg/Airports/master/airports.json"
@@ -1243,3 +1243,4 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
