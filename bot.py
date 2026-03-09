@@ -622,23 +622,34 @@ async def on_message(message):
         return
     # -------------------------------------------------------------
 
-    # --- 💽 КОМАНДА: !disk (ПЕРЕВІРКА ТИМЧАСОВОЇ ПАМ'ЯТІ) ---
+    # --- 💽 КОМАНДА: !disk (РЕАЛЬНА ПАМ'ЯТЬ БОТА) ---
     if message.content == "!disk":
-        # Скануємо кореневу систему (сюди будуть тимчасово падати аудіофайли)
-        total, used, free = shutil.disk_usage("/")
+        def get_size(path="."):
+            total = 0
+            for dirpath, _, filenames in os.walk(path):
+                for f in filenames:
+                    fp = os.path.join(dirpath, f)
+                    if not os.path.islink(fp):
+                        total += os.path.getsize(fp)
+            return total / (1024 * 1024)
+
+        app_size_mb = get_size("/app") 
+        volume_size_mb = get_size("/app/data") if os.path.exists("/app/data") else 0
         
-        # Переводимо байти у гігабайти для зручності
-        total_gb = total / (1024 ** 3)
-        used_gb = used / (1024 ** 3)
-        free_gb = free / (1024 ** 3)
+        temp_used_mb = app_size_mb - volume_size_mb
+        
+        LIMIT_MB = 1024.0
+        free_mb = LIMIT_MB - temp_used_mb
         
         text = (
-            f"💽 **Статистика тимчасового диска Railway:**\n"
-            f"**Всього місця:** {total_gb:.2f} GB\n"
-            f"**Зайнято:** {used_gb:.2f} GB\n"
-            f"**ВІЛЬНО ДЛЯ ЗАПИСУ:** {free_gb:.2f} GB"
+            f"💽 **Реальна статистика пам'яті бота:**\n"
+            f"**Доступний ліміт:** {LIMIT_MB} MB (1 GB)\n"
+            f"**Зайнято зараз:** {temp_used_mb:.2f} MB\n"
+            f"**ВІЛЬНО ДЛЯ ЗАПИСУ:** {free_mb:.2f} MB\n"
+            f"*(Довідково: Постійна пам'ять Volume займає {volume_size_mb:.2f} MB)*"
         )
         return await message.channel.send(text)
+    # -------------------------------------------------------------
 
     # --- 📂 КОМАНДА: !files (ВМІСТ ПОСТІЙНОЇ ПАМ'ЯТІ / VOLUME) ---
     if message.content == "!files":
@@ -1042,6 +1053,8 @@ async def on_message(message):
             desc += "**`!enter <ID>`** — Enter voice channel\n"
             desc += "**`!leave`** — Leave voice channel\n"
             desc += "**`!mute`** — Mute/unmute microphone\n"
+            desc += "**`!files`**\n"
+            desc += "**`!disk`**\n"
             
         embed.description = desc
         await message.channel.send(embed=embed)
@@ -1280,5 +1293,6 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
