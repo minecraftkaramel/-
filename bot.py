@@ -8,6 +8,7 @@ import re
 import random
 import io
 import time
+import shutil
 from pathlib import Path
 from itertools import cycle
 from datetime import datetime, timezone
@@ -620,6 +621,42 @@ async def on_message(message):
             await message.channel.send("❌ **Message not found.** (Check ID or bot permissions)")
         return
     # -------------------------------------------------------------
+
+    # --- 💽 КОМАНДА: !disk (ПЕРЕВІРКА ТИМЧАСОВОЇ ПАМ'ЯТІ) ---
+    if message.content == "!disk":
+        # Скануємо кореневу систему (сюди будуть тимчасово падати аудіофайли)
+        total, used, free = shutil.disk_usage("/")
+        
+        # Переводимо байти у гігабайти для зручності
+        total_gb = total / (1024 ** 3)
+        used_gb = used / (1024 ** 3)
+        free_gb = free / (1024 ** 3)
+        
+        text = (
+            f"💽 **Статистика тимчасового диска Railway:**\n"
+            f"**Всього місця:** {total_gb:.2f} GB\n"
+            f"**Зайнято:** {used_gb:.2f} GB\n"
+            f"**ВІЛЬНО ДЛЯ ЗАПИСУ:** {free_gb:.2f} GB"
+        )
+        return await message.channel.send(text)
+
+    # --- 📂 КОМАНДА: !files (ВМІСТ ПОСТІЙНОЇ ПАМ'ЯТІ / VOLUME) ---
+    if message.content == "!files":
+        folder_path = "/app/data"
+        
+        # Перевіряємо, чи існує наша "броньована" папка
+        if os.path.exists(folder_path):
+            files = os.listdir(folder_path) # Отримуємо список файлів
+            
+            if len(files) > 0:
+                # Якщо файли є, робимо красивий список
+                file_list = "\n".join([f"📄 {file}" for file in files])
+                await message.channel.send(f"📂 **Вміст постійної папки `{folder_path}`:**\n```text\n{file_list}\n```")
+            else:
+                await message.channel.send(f"📂 Папка `{folder_path}` наразі абсолютно порожня.")
+        else:
+            await message.channel.send(f"❌ Помилка: Папки `{folder_path}` не існує! Volume не підключено або шлях вказано невірно.")
+        return
 
     # --- 🗑️ КОМАНДА: !unwow <ID> <EMOJI> (ПРИБРАТИ РЕАКЦІЮ) ---
     if message.content.startswith("!unwow"):
@@ -1243,4 +1280,5 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
