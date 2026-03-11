@@ -92,8 +92,8 @@ def init_week_stats():
         "records": {
             "butter": {"fpm": -99999, "g": 0.0, "pilot": "None"},
             "hardest": {"fpm": 0, "g": 0.0, "pilot": "None"},
-            "longest": {"time": 0, "pilot": "None"},
-            "shortest": {"time": 99999, "pilot": "None"}
+            "longest": {"time": 0, "pilot": "None", "dep": "???", "arr": "???"},
+            "shortest": {"time": 99999, "pilot": "None", "dep": "???", "arr": "???"}
         }
     }
 
@@ -152,10 +152,10 @@ def update_weekly_stats(f, week_tag):
         s["records"]["hardest"] = {"fpm": fpm_val, "g": check_g, "pilot": pilot}
         
     if ftime > s["records"]["longest"]["time"]:
-        s["records"]["longest"] = {"time": ftime, "pilot": pilot}
+        s["records"]["longest"] = {"time": ftime, "pilot": pilot, "dep": dep, "arr": arr}
         
     if ftime > 0 and ftime < s["records"]["shortest"]["time"]:
-        s["records"]["shortest"] = {"time": ftime, "pilot": pilot}
+        s["records"]["shortest"] = {"time": ftime, "pilot": pilot, "dep": dep, "arr": arr}
         
     save_weekly_stats(stats)
 
@@ -227,34 +227,46 @@ async def publish_weekly_embed(channel, week_tag, s):
         return f"{int(minutes // 60):02d} hrs {int(minutes % 60):02d} mins"
 
     earn_val = s['earnings']
-    sign = "+ " if earn_val >= 0 else "- "
+    sign = "+" if earn_val >= 0 else "-" # 🔥 Прибрано пропуск між знаком і сумою
+    
+    # 🔥 Формування маршрутів з прапорами для рекордів
+    l_dep = rec['longest'].get('dep', '???')
+    l_arr = rec['longest'].get('arr', '???')
+    l_route = f" ({get_flag(AIRPORTS_DB.get(l_dep, {}).get('country', 'XX'))} {l_dep} ➔ {get_flag(AIRPORTS_DB.get(l_arr, {}).get('country', 'XX'))} {l_arr})" if l_dep != "???" else ""
+    
+    s_dep = rec['shortest'].get('dep', '???')
+    s_arr = rec['shortest'].get('arr', '???')
+    s_route = f" ({get_flag(AIRPORTS_DB.get(s_dep, {}).get('country', 'XX'))} {s_dep} ➔ {get_flag(AIRPORTS_DB.get(s_arr, {}).get('country', 'XX'))} {s_arr})" if s_dep != "???" else ""
     
     desc = (
         f"**📈 General Statistics**\n"
-        f"> 🛫 **Flights Completed:** {fl}\n"
-        f"> 💰 **Airline Earnings:** {sign}{abs(earn_val):,} $\n"
-        f"> 👫 **Passengers Carried:** {s['pax']:,} Pax\n"
-        f"> 📦 **Cargo Carried:** {s['cargo']:,} kg\n\n"
+        f"🛫 **Flights Completed:** {fl}\n"
+        f"💰 **Airline Earnings:** {sign}{abs(earn_val):,} $\n"
+        f"👫 **Passengers Carried:** {s['pax']:,} Pax\n"
+        f"📦 **Cargo Carried:** {s['cargo']:,} kg\n\n"
         
         f"**🏆 Weekly Records**\n"
-        f"> 🥇 **Most Active Pilot:**\n"
-        f"> {top_pilot} ({top_pilot_flights} flights)\n> \n"
-        f"> 🧈 **Butter Landing:**\n"
-        f"> {rec['butter']['pilot']} ({rec['butter']['fpm']} fpm, {rec['butter']['g']} G)\n> \n"
-        f"> 💥 **Hardest Landing:**\n"
-        f"> {rec['hardest']['pilot']} ({rec['hardest']['fpm']} fpm, {rec['hardest']['g']} G)\n> \n"
-        f"> 🐢 **Longest Flight:**\n"
-        f"> {format_duration(rec['longest']['time'])} ({rec['longest']['pilot']})\n> \n"
-        f"> 🚀 **Shortest Flight:**\n"
-        f"> {format_duration(rec['shortest']['time'])} ({rec['shortest']['pilot']})\n\n"
+        f"🥇 **Most Active Pilot:**\n"
+        f"{top_pilot} ({top_pilot_flights} flights)\n\n"
+        
+        f"🧈 **Butter Landing:**\n"
+        f"{rec['butter']['pilot']} ({rec['butter']['fpm']} fpm, {rec['butter']['g']} G)\n\n"
+        
+        f"🛬 **Hardest Landing:**\n" # 🔥 Змінено смайл з вибуху
+        f"{rec['hardest']['pilot']} ({rec['hardest']['fpm']} fpm, {rec['hardest']['g']} G)\n\n"
+        
+        f"🐢 **Longest Flight:**\n"
+        f"{format_duration(rec['longest']['time'])} — {rec['longest']['pilot']}{l_route}\n\n"
+        
+        f"🚀 **Shortest Flight:**\n"
+        f"{format_duration(rec['shortest']['time'])} — {rec['shortest']['pilot']}{s_route}\n\n"
         
         f"**⭐ Company Averages**\n"
-        f"> 📈 **Average Rating:** {avg_rating}\n"
-        f"> 📉 **Average FPM:** {avg_fpm} fpm | {avg_g} G\n\n"
+        f"📈 **Average Rating:** {avg_rating}\n"
+        f"📉 **Average FPM:** {avg_fpm} fpm | {avg_g} G\n\n"
         
-        f"**🌍 Top Location**\n"
-        f"> 📍 **Most Popular Airport:**\n"
-        f"> {apt_flag} **{top_apt}** — {top_apt_ops} operations"
+        f"📍 **Most Popular Airport:**\n" # 🔥 Прибрано "Top Location"
+        f"{apt_flag} **{top_apt}** — {top_apt_ops} operations"
     )
     
     embed = discord.Embed(
@@ -1595,6 +1607,7 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
 
