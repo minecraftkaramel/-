@@ -702,13 +702,18 @@ async def on_message(message):
     if message.content == "!stats":
         if not is_admin: return await message.channel.send("🚫 **Access Denied**")
         
-        if not WEEKLY_STATS_FILE.exists() or os.path.getsize(WEEKLY_STATS_FILE) == 0:
-            return await message.channel.send("⚠️ **Stats file (weekly_stats.json) is empty or does not exist yet.**")
-            
-        await message.channel.send(
-            content="📊 **Weekly Stats File (weekly_stats.json):**", 
-            file=discord.File(WEEKLY_STATS_FILE)
-        )
+        try:
+            if not WEEKLY_STATS_FILE.exists() or os.path.getsize(WEEKLY_STATS_FILE) == 0:
+                return await message.channel.send("⚠️ **Stats file (weekly_stats.json) is empty or does not exist yet.**")
+                
+            # Бронебійний спосіб відправки файлів у Discord
+            with open(WEEKLY_STATS_FILE, "rb") as fp:
+                await message.channel.send(
+                    content="📊 **Weekly Stats File:**", 
+                    file=discord.File(fp, filename="weekly_stats.json")
+                )
+        except Exception as e:
+            await message.channel.send(f"❌ **Помилка при відправці файлу:** {e}")
         return
     # --------------------------------------------------------
 
@@ -1285,6 +1290,7 @@ async def on_message(message):
             desc += "**`!mute`** — Mute/unmute microphone\n"
             desc += "**`!files`**\n"
             desc += "**`!disk`**\n"
+            desc += "**`!stats`**\n"
             
         embed.description = desc
         await message.channel.send(embed=embed)
@@ -1537,4 +1543,5 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
