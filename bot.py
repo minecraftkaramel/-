@@ -347,7 +347,6 @@ async def send_flight_message(channel, status, f, details_type="ongoing", reply_
             title_text = f"{type_emoji} 💥 {full_cs} CRASHED"
             color_code = 0x992d22 
             rating_str = "💀 **CRASH**"
-            formatted_balance = "-1.000.000" 
             time_info_str = "" 
         
         elif f.get("emergency") is True or (raw_balance == 0 and dist > 1):
@@ -1293,6 +1292,7 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
 
