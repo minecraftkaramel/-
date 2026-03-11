@@ -223,51 +223,58 @@ async def publish_weekly_embed(channel, week_tag, s):
     
     rec = s["records"]
     
-    # Зробив формат часу більш компактним для колонок (напр. 03h 05m)
     def format_duration(minutes):
-        return f"{int(minutes // 60):02d}h {int(minutes % 60):02d}m"
+        return f"{int(minutes // 60):02d} hrs {int(minutes % 60):02d} mins"
 
     earn_val = s['earnings']
     sign = "+" if earn_val >= 0 else "-" 
     
-    # Формування маршрутів (взято у зворотні лапки ` ` для красивого виділення фоном)
     l_dep = rec['longest'].get('dep', '???')
     l_arr = rec['longest'].get('arr', '???')
-    l_route = f"\n`{get_flag(AIRPORTS_DB.get(l_dep, {}).get('country', 'XX'))} {l_dep} ➔ {get_flag(AIRPORTS_DB.get(l_arr, {}).get('country', 'XX'))} {l_arr}`" if l_dep != "???" else ""
+    l_route = f" ({get_flag(AIRPORTS_DB.get(l_dep, {}).get('country', 'XX'))} {l_dep} ➔ {get_flag(AIRPORTS_DB.get(l_arr, {}).get('country', 'XX'))} {l_arr})" if l_dep != "???" else ""
     
     s_dep = rec['shortest'].get('dep', '???')
     s_arr = rec['shortest'].get('arr', '???')
-    s_route = f"\n`{get_flag(AIRPORTS_DB.get(s_dep, {}).get('country', 'XX'))} {s_dep} ➔ {get_flag(AIRPORTS_DB.get(s_arr, {}).get('country', 'XX'))} {s_arr}`" if s_dep != "???" else ""
+    s_route = f" ({get_flag(AIRPORTS_DB.get(s_dep, {}).get('country', 'XX'))} {s_dep} ➔ {get_flag(AIRPORTS_DB.get(s_arr, {}).get('country', 'XX'))} {s_arr})" if s_dep != "???" else ""
     
-    # Створюємо базовий Embed
+    desc = (
+        f"### 📈 General Statistics\n"
+        f"🛫 **Flights Completed:** {fl}\n"
+        f"💰 **Airline Earnings:** {sign}{abs(earn_val):,} $\n"
+        f"👫 **Passengers Carried:** {s['pax']:,} Pax\n"
+        f"📦 **Cargo Carried:** {s['cargo']:,} kg\n\n"
+        
+        f"### 🏆 Weekly Records\n"
+        f"🥇 **Most Active Pilot:**\n"
+        f"╰ {top_pilot} ({top_pilot_flights} flights)\n\n"
+        
+        f"🧈 **Butter Landing:**\n"
+        f"╰ {rec['butter']['pilot']} ({rec['butter']['fpm']} fpm, {rec['butter']['g']} G)\n\n"
+        
+        f"🛬 **Hardest Landing:**\n"
+        f"╰ {rec['hardest']['pilot']} ({rec['hardest']['fpm']} fpm, {rec['hardest']['g']} G)\n\n"
+        
+        f"🐢 **Longest Flight:**\n"
+        f"╰ {format_duration(rec['longest']['time'])} — {rec['longest']['pilot']}{l_route}\n\n"
+        
+        f"🚀 **Shortest Flight:**\n"
+        f"╰ {format_duration(rec['shortest']['time'])} — {rec['shortest']['pilot']}{s_route}\n\n"
+        
+        f"### ⭐ Company Averages\n"
+        f"📈 **Average Rating:** {avg_rating}\n"
+        f"📉 **Average FPM:** {avg_fpm} fpm | {avg_g} G\n\n"
+        
+        f"### 🌍 Top Location\n"
+        f"📍 **Most Popular Airport:**\n"
+        f"╰ {apt_flag} **{top_apt}** — {top_apt_ops} operations"
+    )
+    
     embed = discord.Embed(
         title=f"📊 Weekly Summary for {dates_str}",
+        description=desc,
         color=0x3498db
     )
     
-    # 1. Загальна статистика (На всю ширину)
-    embed.add_field(
-        name="📈 General Statistics", 
-        value=f"🛫 **Flights Completed:** {fl}\n💰 **Airline Earnings:** {sign}{abs(earn_val):,} $\n👫 **Pax:** {s['pax']:,}  |  📦 **Cargo:** {s['cargo']:,} kg", 
-        inline=False
-    )
-    
-    # 2. Рекорди пілотів (3 колонки в ряд)
-    embed.add_field(name="🥇 Most Active", value=f"**{top_pilot}**\n*{top_pilot_flights} flights*", inline=True)
-    embed.add_field(name="🧈 Butter Landing", value=f"**{rec['butter']['pilot']}**\n*{rec['butter']['fpm']} fpm | {rec['butter']['g']} G*", inline=True)
-    embed.add_field(name="🛬 Hardest Landing", value=f"**{rec['hardest']['pilot']}**\n*{rec['hardest']['fpm']} fpm | {rec['hardest']['g']} G*", inline=True)
-    
-    # 3. Рекорди часу (2 колонки)
-    embed.add_field(name="🐢 Longest Flight", value=f"**{rec['longest']['pilot']}**\n⏱️ {format_duration(rec['longest']['time'])}{l_route}", inline=True)
-    embed.add_field(name="🚀 Shortest Flight", value=f"**{rec['shortest']['pilot']}**\n⏱️ {format_duration(rec['shortest']['time'])}{s_route}", inline=True)
-    
-    # Пусте невидиме поле для вирівнювання сітки (щоб наступні блоки перенеслись вниз)
-    embed.add_field(name="\u200b", value="\u200b", inline=True)
-    
-    # 4. Середні показники та топ локація (2 колонки)
-    embed.add_field(name="⭐ Company Averages", value=f"**Rating:** {avg_rating}\n**FPM:** {avg_fpm} fpm | {avg_g} G", inline=True)
-    embed.add_field(name="📍 Top Location", value=f"{apt_flag} **{top_apt}**\n*{top_apt_ops} operations*", inline=True)
-
     try: 
         msg = await channel.send(embed=embed)
         return msg 
@@ -1610,6 +1617,7 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
 
