@@ -698,6 +698,20 @@ async def on_message(message):
         return
     # --------------------------------------------------------
 
+        # --- 📊 КОМАНДА: !stats (СКАЧАТИ ФАЙЛ СТАТИСТИКИ) ---
+    if message.content == "!stats":
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        
+        if not WEEKLY_STATS_FILE.exists() or os.path.getsize(WEEKLY_STATS_FILE) == 0:
+            return await message.channel.send("⚠️ **Stats file (weekly_stats.json) is empty or does not exist yet.**")
+            
+        await message.channel.send(
+            content="📊 **Weekly Stats File (weekly_stats.json):**", 
+            file=discord.File(WEEKLY_STATS_FILE)
+        )
+        return
+    # --------------------------------------------------------
+
     # --- 📜 КОМАНДА: !audit [all/кількість] (СКАЧАТИ ЖУРНАЛ АУДИТУ) ---
     if message.content.startswith("!audit"):
         if not is_admin: return await message.channel.send("🚫 **Access Denied**")
@@ -1523,3 +1537,4 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
