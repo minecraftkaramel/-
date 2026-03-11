@@ -26,6 +26,7 @@ START_TIME = datetime.now(timezone.utc)
 
 STATE_FILE = Path("/app/data/sent.json")
 STATUS_FILE = Path("/app/data/statuses.json")
+WEEKLY_STATS_FILE = Path("/app/data/weekly_stats.json") # 🔥 ФАЙЛ ДЛЯ СТАТИСТИКИ
 CHECK_INTERVAL = 30
 BASE_URL = "https://newsky.app/api/airline-api"
 AIRPORTS_DB_URL = "https://raw.githubusercontent.com/mwgg/Airports/master/airports.json"
@@ -53,6 +54,222 @@ def save_state(state):
         if len(state) > 100: state = dict(list(state.items())[-50:])
         STATE_FILE.write_text(json.dumps(state), encoding="utf-8")
     except: pass
+
+# 🔥 БЛОК ФУНКЦІЙ ДЛЯ СТАТИСТИКИ 🔥
+def load_weekly_stats():
+    if not WEEKLY_STATS_FILE.exists(): return {}
+    try: return json.loads(WEEKLY_STATS_FILE.read_text(encoding="utf-8"))
+    except: return {}
+
+def save_weekly_stats(stats):
+    try: WEEKLY_STATS_FILE.write_text(json.dumps(stats, indent=4), encoding="utf-8")
+    except: pass
+
+def get_iso_week(dt_str=None):
+    if dt_str:
+        try:
+            dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+        except:
+            dt = datetime.now(timezone.utc)
+    else:
+        dt = datetime.now(timezone.utc)
+    y, w, _ = dt.isocalendar()
+    return f"{y}-W{w:02d}"
+
+def get_week_dates_string(week_tag):
+    try:
+        y, w = map(int, week_tag.split("-W"))
+        first_day = datetime.strptime(f'{y}-W{w}-1', "%G-W%V-%u")
+        last_day = datetime.strptime(f'{y}-W{w}-7', "%G-W%V-%u")
+        return f"{first_day.strftime('%d.%m.%Y')} - {last_day.strftime('%d.%m.%Y')}"
+    except: return week_tag
+
+def init_week_stats():
+    return {
+        "flights": 0, "earnings": 0, "pax": 0, "cargo": 0,
+        "rating_sum": 0.0, "fpm_sum": 0, "g_sum": 0.0,
+        "pilots": {}, "airports": {},
+        "records": {
+            "butter": {"fpm": -99999, "g": 0.0, "pilot": "None"},
+            "hardest": {"fpm": 0, "g": 0.0, "pilot": "None"},
+            "longest": {"time": 0, "pilot": "None"},
+            "shortest": {"time": 99999, "pilot": "None"}
+        }
+    }
+
+def update_weekly_stats(f, week_tag):
+    stats = load_weekly_stats()
+    if week_tag not in stats:
+        stats[week_tag] = init_week_stats()
+        
+    s = stats[week_tag]
+    
+    t = f.get("result", {}).get("totals", {})
+    balance = int(t.get("balance", 0))
+    
+    raw_pax = t.get("payload", {}).get("pax", 0)
+    if raw_pax == 0 and f.get("type") != "cargo":
+        raw_pax = int(f.get("payload", {}).get("pax", 0))
+        
+    cargo_kg = int(f.get("payload", {}).get("weights", {}).get("cargo", 0))
+    rating = float(f.get("rating", 0.0))
+    ftime = int(t.get("time", 0))
+    
+    pilot = f.get("pilot", {}).get("fullname", "Unknown Pilot")
+    dep = f.get("dep", {}).get("icao", "???")
+    arr = f.get("arr", {}).get("icao", "???")
+    
+    check_g, check_fpm = 0.0, 0
+    if "result" in f and "violations" in f["result"]:
+        for v in f["result"]["violations"]:
+            entry = v.get("entry", {}).get("payload", {}).get("touchDown", {})
+            if entry:
+                check_g = float(entry.get("gForce", 0))
+                check_fpm = int(entry.get("rate", 0))
+                break 
+    if check_g == 0 and "landing" in f:
+        check_g = float(f.get("landing", {}).get("gForce", 0))
+        check_fpm = int(f.get("landing", {}).get("rate", 0) or f.get("landing", {}).get("touchDownRate", 0))
+        
+    fpm_val = -abs(check_fpm) if check_fpm != 0 else 0
+    
+    s["flights"] += 1
+    s["earnings"] += balance
+    s["pax"] += raw_pax
+    s["cargo"] += cargo_kg
+    s["rating_sum"] += rating
+    s["fpm_sum"] += fpm_val
+    s["g_sum"] += check_g
+    
+    s["pilots"][pilot] = s["pilots"].get(pilot, 0) + 1
+    s["airports"][dep] = s["airports"].get(dep, 0) + 1
+    s["airports"][arr] = s["airports"].get(arr, 0) + 1
+    
+    if fpm_val < 0 and fpm_val > s["records"]["butter"]["fpm"]:
+        s["records"]["butter"] = {"fpm": fpm_val, "g": check_g, "pilot": pilot}
+        
+    if fpm_val < s["records"]["hardest"]["fpm"]:
+        s["records"]["hardest"] = {"fpm": fpm_val, "g": check_g, "pilot": pilot}
+        
+    if ftime > s["records"]["longest"]["time"]:
+        s["records"]["longest"] = {"time": ftime, "pilot": pilot}
+        
+    if ftime > 0 and ftime < s["records"]["shortest"]["time"]:
+        s["records"]["shortest"] = {"time": ftime, "pilot": pilot}
+        
+    save_weekly_stats(stats)
+
+async def check_and_publish_weekly_stats(channel, state):
+    stats = load_weekly_stats()
+    if not stats: return
+    
+    current_week = get_iso_week()
+    weeks_to_delete = []
+    
+    for week_tag, s in stats.items():
+        if week_tag >= current_week:
+            continue
+            
+        active_flight_exists = False
+        for fid, fstate in state.items():
+            if isinstance(fstate, dict) and not fstate.get("completed") and fstate.get("week") == week_tag:
+                active_flight_exists = True
+                break
+                
+        if not active_flight_exists:
+            new_msg = await publish_weekly_embed(channel, week_tag, s)
+            
+            if new_msg:
+                # 📌 Відкріплюємо старий звіт (якщо він є в пам'яті)
+                old_msg_id = state.get("pinned_report_id")
+                if old_msg_id:
+                    try:
+                        old_msg = await channel.fetch_message(old_msg_id)
+                        await old_msg.unpin()
+                    except:
+                        pass # Якщо повідомлення вже видалене вручну, просто ігноруємо
+                
+                # 📌 Закріплюємо новий звіт і запам'ятовуємо його ID
+                try:
+                    await new_msg.pin()
+                    state["pinned_report_id"] = new_msg.id
+                except Exception as e:
+                    print(f"Error pinning message: {e}")
+
+            weeks_to_delete.append(week_tag)
+            
+    if weeks_to_delete:
+        for w in weeks_to_delete:
+            del stats[w]
+        save_weekly_stats(stats)
+
+async def publish_weekly_embed(channel, week_tag, s):
+    dates_str = get_week_dates_string(week_tag)
+    fl = s["flights"]
+    if fl == 0: return None
+    
+    avg_rating = round(s["rating_sum"] / fl, 1)
+    avg_fpm = int(s["fpm_sum"] / fl)
+    avg_g = round(s["g_sum"] / fl, 2)
+    
+    top_pilot = max(s["pilots"], key=s["pilots"].get) if s["pilots"] else "None"
+    top_pilot_flights = s["pilots"].get(top_pilot, 0)
+    
+    top_apt = max(s["airports"], key=s["airports"].get) if s["airports"] else "None"
+    top_apt_ops = s["airports"].get(top_apt, 0)
+    
+    db_data = AIRPORTS_DB.get(top_apt.upper(), {})
+    apt_flag = get_flag(db_data.get("country", "XX"))
+    
+    rec = s["records"]
+    
+    def format_duration(minutes):
+        return f"{int(minutes // 60):02d} hrs {int(minutes % 60):02d} mins"
+
+    earn_val = s['earnings']
+    sign = "+ " if earn_val >= 0 else "- "
+    
+    desc = (
+        f"**📈 General Statistics**\n"
+        f"> 🛫 **Flights Completed:** {fl}\n"
+        f"> 💰 **Airline Earnings:** {sign}{abs(earn_val):,} $\n"
+        f"> 👫 **Passengers Carried:** {s['pax']:,} Pax\n"
+        f"> 📦 **Cargo Carried:** {s['cargo']:,} kg\n\n"
+        
+        f"**🏆 Weekly Records**\n"
+        f"> 🥇 **Most Active Pilot:**\n"
+        f"> {top_pilot} ({top_pilot_flights} flights)\n> \n"
+        f"> 🧈 **Butter Landing:**\n"
+        f"> {rec['butter']['pilot']} ({rec['butter']['fpm']} fpm, {rec['butter']['g']} G)\n> \n"
+        f"> 💥 **Hardest Landing:**\n"
+        f"> {rec['hardest']['pilot']} ({rec['hardest']['fpm']} fpm, {rec['hardest']['g']} G)\n> \n"
+        f"> 🐢 **Longest Flight:**\n"
+        f"> {format_duration(rec['longest']['time'])} ({rec['longest']['pilot']})\n> \n"
+        f"> 🚀 **Shortest Flight:**\n"
+        f"> {format_duration(rec['shortest']['time'])} ({rec['shortest']['pilot']})\n\n"
+        
+        f"**⭐ Company Averages**\n"
+        f"> 📈 **Average Rating:** {avg_rating}\n"
+        f"> 📉 **Average FPM:** {avg_fpm} fpm | {avg_g} G\n\n"
+        
+        f"**🌍 Top Location**\n"
+        f"> 📍 **Most Popular Airport:**\n"
+        f"> {apt_flag} **{top_apt}** — {top_apt_ops} operations"
+    )
+    
+    embed = discord.Embed(
+        title=f"📊 Weekly Summary for {dates_str}",
+        description=desc,
+        color=0x3498db
+    )
+    
+    try: 
+        msg = await channel.send(embed=embed)
+        return msg 
+    except Exception as e: 
+        print(f"Error sending weekly embed: {e}")
+        return None
+# 🔥 КІНЕЦЬ БЛОКУ СТАТИСТИКИ 🔥
 
 # --- 🎭 СТАНДАРТНІ СТАТУСИ ---
 DEFAULT_STATUSES = [
@@ -1197,6 +1414,11 @@ async def main_loop():
                         if f.get("takeoffTimeAct") and not state[fid].get("takeoff"):
                             msg_id = await send_flight_message(channel, "Departed", f, "ongoing")
                             state[fid]["takeoff"] = True
+                            
+                            # 🔥 НОВЕ: Генерація мітки тижня під час зльоту 🔥
+                            sched_time = f.get("depTimeSched") or f.get("creationDate")
+                            state[fid]["week"] = get_iso_week(sched_time)
+                            
                             if msg_id:
                                 state[fid]["msg_id"] = msg_id
 
@@ -1230,6 +1452,11 @@ async def main_loop():
 
                             reply_id = state.get(fid, {}).get("msg_id")
                             await send_flight_message(channel, "Completed", f, "result", reply_to_id=reply_id)
+                            
+                            # 🔥 НОВЕ: Збір статистики після посадки 🔥
+                            week_tag = state.get(fid, {}).get("week") or get_iso_week()
+                            update_weekly_stats(f, week_tag)
+                            
                             state.setdefault(fid, {})["completed"] = True
                             print(f"✅ Report Sent: {cs}")
                         
@@ -1252,6 +1479,10 @@ async def main_loop():
                     first_run = False
 
                 save_state(state)
+                
+                # 🔥 НОВЕ: Перевірка і публікація звіту в кінці кожного циклу 🔥
+                await check_and_publish_weekly_stats(channel, state)
+                
             except Exception as e: print(f"Loop Error: {e}")
             
             await asyncio.sleep(CHECK_INTERVAL)
@@ -1292,7 +1523,3 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
-
-
-
-
