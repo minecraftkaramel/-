@@ -850,6 +850,45 @@ async def on_message(message):
         return
     # -------------------------------------------------------------
 
+    # --- 🗑️ КОМАНДА: !del (РОЗУМНЕ ВИДАЛЕННЯ ТІЛЬКИ ЗА ID) ---
+    if message.content.startswith("!del"):
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        
+        parts = message.content.split()
+        if len(parts) != 2:
+            return await message.channel.send("⚠️ **Формат:** `!del <ID_повідомлення>`")
+            
+        try:
+            msg_id = int(parts[1])
+        except ValueError:
+            return await message.channel.send("❌ **Помилка:** ID повідомлення має бути числом.")
+            
+        status_msg = await message.channel.send("⏳ **Шукаю повідомлення по всіх каналах...**")
+        
+        found_msg = None
+        
+        for guild in client.guilds:
+            for channel in guild.text_channels:
+                try:
+                    found_msg = await channel.fetch_message(msg_id)
+                    break
+                except:
+                    continue
+            if found_msg:
+                break
+                
+        if found_msg:
+            try:
+                await found_msg.delete()
+                await status_msg.edit(content=f"✅ **Успіх!** Повідомлення тихо знищено в каналі `#{found_msg.channel.name}` 🥷")
+            except discord.Forbidden:
+                await status_msg.edit(content="❌ **Помилка:** Знайшов повідомлення, але не маю прав на його видалення (перевір Manage Messages).")
+        else:
+            await status_msg.edit(content="❌ **Помилка:** Повідомлення з таким ID не знайдено на сервері (або воно вже видалене).")
+            
+        return
+    # -------------------------------------------------------------------------
+
     # --- 🧹 КОМАНДА: !clearwow <ID> (ОЧИСТИТИ ВСІ РЕАКЦІЇ) ---
     if message.content.startswith("!clearwow"):
         if not is_admin: return await message.channel.send("🚫 **Access Denied**")
@@ -1155,51 +1194,48 @@ async def on_message(message):
         return
     # ------------------------------------------------
 
-    # --- 📢 КОМАНДА: !msg [ID] <text> (ЗІ ЗБЕРЕЖЕННЯМ) ---
+    # --- ✉️ КОМАНДА: !msg <ID_каналу> <текст> (+ МОЖНА ПРИКРІПЛЯТИ КАРТИНКИ) ---
     if message.content.startswith("!msg"):
-        if not is_admin: 
-            return await message.channel.send("🚫 **Access Denied**")
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
         
-        parts = message.content.split()
+        # Розбиваємо повідомлення на 3 частини: команду, ID каналу і сам текст
+        parts = message.content.split(" ", 2)
         if len(parts) < 2:
-            return await message.channel.send("⚠️ Usage: `!msg [Channel_ID] text` or `!msg text`")
-        
-        target_channel = client.get_channel(CHANNEL_ID)
-        content_start_index = 1
-        
-        potential_id = parts[1]
-        
-        if potential_id.isdigit() and len(potential_id) > 15:
-            try:
-                found_channel = await client.fetch_channel(int(potential_id))
-                if found_channel:
-                    target_channel = found_channel
-                    content_start_index = 2
-            except discord.NotFound:
-                return await message.channel.send(f"❌ **Error:** Channel with ID `{potential_id}` not found.")
-            except discord.Forbidden:
-                return await message.channel.send(f"❌ **Error:** I see channel `{potential_id}`, but I don't have permission to write there.")
-            except Exception as e:
-                pass
-
-        content = " ".join(parts[content_start_index:])
-        
-        if not content:
-            return await message.channel.send("⚠️ Empty message.")
-        
-        if target_channel:
-            try:
-                sent_msg = await target_channel.send(content)
-                last_sent_message = sent_msg 
+            return await message.channel.send("⚠️ **Формат:** `!msg <ID_каналу> <текст>` (і можеш прикріпити картинку)")
+            
+        try:
+            channel_id = int(parts[1])
+            # Шукаємо канал на сервері
+            target_channel = message.guild.get_channel(channel_id) 
+            if not target_channel:
+                return await message.channel.send("❌ **Помилка:** Канал з таким ID не знайдено на цьому сервері.")
                 
-                await message.channel.send(f"✅ **Sent to {target_channel.mention}:**\n{content}")
-            except Exception as e:
-                await message.channel.send(f"❌ **Error:** {e}")
-        else:
-            await message.channel.send("❌ **Error:** Default channel not found (check CHANNEL_ID)")
+            # Дістаємо текст (якщо він є)
+            text_to_send = parts[2] if len(parts) > 2 else ""
+            
+            # Збираємо всі прикріплені файли (картинки, гіфки тощо)
+            files_to_send = []
+            for attachment in message.attachments:
+                # Конвертуємо у формат файлу Discord
+                files_to_send.append(await attachment.to_file())
+                
+            # Перевірка: чи є взагалі що відправляти
+            if not text_to_send and not files_to_send:
+                return await message.channel.send("⚠️ **Помилка:** Немає тексту або картинки для відправки.")
+                
+            # Відправляємо магію в цільовий канал 🪄
+            await target_channel.send(content=text_to_send, files=files_to_send)
+            
+            # Бот просто поставить галочку на твоє повідомлення, щоб ти знав, що все ок
+            await message.add_reaction("✅") 
+            
+        except ValueError:
+            await message.channel.send("❌ **Помилка:** ID каналу має бути числом.")
+        except Exception as e:
+            await message.channel.send(f"❌ **Помилка при відправці:** {e}")
         return
-    # ------------------------------------------------------------
-
+    # -------------------------------------------------------------------------
+    
     # --- 📡 КОМАНДА: !traffic (ПОКАЗАТИ АКТИВНІ РЕЙСИ) ---
     if message.content == "!traffic":
         global LAST_TRAFFIC_TIME
@@ -1325,7 +1361,7 @@ async def on_message(message):
         
         embed = discord.Embed(title="📚 Bot Commands", color=0x3498db)
         
-        # 1. Це бачать УСІ користувачі
+       # 1. Це бачать УСІ користувачі
         desc = "**🔹 User Commands:**\n"
         desc += "**`!help`** — Show command list\n"
         desc += "**`!traffic`** — Show active flights\n\n"
@@ -1335,7 +1371,8 @@ async def on_message(message):
             desc += "**🔒 Admin Commands:**\n"
             desc += "**`!status`** — System status\n"
             desc += "**`!test [min]`** — Run test scenarios\n"
-            desc += "**`!msg [ID] <text>`** — Send text message\n"
+            desc += "**`!msg [ID] <text/pic>`** — Send text or image message\n"
+            desc += "**`!del <msg_ID>`** — Delete any message globally\n"
             desc += "**`!reply <ID> <text>`** — Reply to a message\n"
             desc += "**`!undo`** — Delete last !msg or !reply\n"
             desc += "**`!wow <ID> <emoji>`** — React to message\n"
@@ -1360,10 +1397,12 @@ async def on_message(message):
             desc += "**`!enter <ID>`** — Enter voice channel\n"
             desc += "**`!leave`** — Leave voice channel\n"
             desc += "**`!mute`** — Mute/unmute microphone\n"
-            desc += "**`!files`**\n"
-            desc += "**`!disk`**\n"
-            desc += "**`!stats`**\n"
-            desc += "**`!addflight`**\n"
+            desc += "**`!files`** — Show local directory files\n"
+            desc += "**`!disk`** — Show server disk usage\n"
+            desc += "**`!stats`** — Download weekly_stats.json\n"
+            desc += "**`!teststats`** — Preview weekly report embed\n"
+            desc += "**`!addflight <ID>`** — Add missed flight to stats\n"
+            desc += "**`!clearstats`** — Wipe all weekly stats data\n"
             
         embed.description = desc
         await message.channel.send(embed=embed)
@@ -1616,6 +1655,7 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
 
