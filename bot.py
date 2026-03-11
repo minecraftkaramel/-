@@ -698,6 +698,41 @@ async def on_message(message):
         return
     # --------------------------------------------------------
 
+    # --- ➕ КОМАНДА: !addflight <ID> (ДОДАТИ ПРОПУЩЕНИЙ РЕЙС) ---
+    if message.content.startswith("!addflight"):
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        
+        parts = message.content.split()
+        if len(parts) < 2:
+            return await message.channel.send("⚠️ Usage: `!addflight <Flight_ID>`")
+        
+        fid = parts[1]
+        msg = await message.channel.send(f"⏳ **Шукаю рейс `{fid}` в базі Newsky...**")
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                det = await fetch_api(session, f"/flight/{fid}")
+                
+                if not det or "flight" not in det:
+                    return await msg.edit(content=f"❌ **Помилка:** Рейс `{fid}` не знайдено в API.")
+                
+                f = det["flight"]
+                
+                # Визначаємо тиждень цього рейсу
+                sched_time = f.get("depTimeSched") or f.get("creationDate")
+                week_tag = get_iso_week(sched_time)
+                
+                # Записуємо у статистику
+                update_weekly_stats(f, week_tag)
+                
+                cs = f.get("flightNumber") or f.get("callsign") or "Unknown"
+                await msg.edit(content=f"✅ **Рейс `{cs}` успішно знайдено та додано до тижня `{week_tag}`!**\n*(Напиши `!stats` щоб перевірити файл)*")
+                
+        except Exception as e:
+            await msg.edit(content=f"❌ **Сталася внутрішня помилка:** {e}")
+        return
+    # -------------------------------------------------------------
+
         # --- 📊 КОМАНДА: !stats (СКАЧАТИ ФАЙЛ СТАТИСТИКИ) ---
     if message.content == "!stats":
         if not is_admin: return await message.channel.send("🚫 **Access Denied**")
@@ -1291,6 +1326,7 @@ async def on_message(message):
             desc += "**`!files`**\n"
             desc += "**`!disk`**\n"
             desc += "**`!stats`**\n"
+            desc += "**`!addflight`**\n"
             
         embed.description = desc
         await message.channel.send(embed=embed)
@@ -1543,5 +1579,6 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
