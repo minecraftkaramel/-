@@ -73,6 +73,35 @@ def upload_to_gdrive(file_path, file_name):
     return file.get('id')
 # ---------------------------------
 
+# Словник для зберігання активних записів
+connections = {}
+
+# --- ФУНКЦІЯ ОБРОБКИ ЗАПИСУ (Спрацьовує автоматично після зупинки) ---
+async def once_done(sink: discord.sinks.Sink, channel: discord.TextChannel, *args):
+    await channel.send("⏳ Обробляю аудіо та вивантажую на Google Диск...")
+    
+    for user_id, audio in sink.audio_data.items():
+        file_name = f"record_{user_id}.wav"
+        file_path = f"/app/{file_name}"
+        
+        with open(file_path, "wb") as f:
+            f.write(audio.file.read())
+        
+        file_id = upload_to_gdrive(file_path, file_name)
+        
+        if file_id:
+            await channel.send(f"✅ Готово! Аудіо від <@{user_id}> збережено на Диск!")
+        else:
+            await channel.send(f"❌ Помилка завантаження для <@{user_id}>.")
+        
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+    for vc in channel.guild.voice_client.bot.voice_clients:
+        if vc.guild.id == channel.guild.id:
+            await vc.disconnect()
+# ----------------------------------------------------------------------
+
 # ---------- ДОПОМІЖНІ ФУНКЦІЇ ----------
 def load_state():
     if not STATE_FILE.exists(): return {}
@@ -652,6 +681,33 @@ async def on_message(message):
             await message.channel.send("❌ **Message not found.** (Check ID or bot permissions)")
         return
     # -------------------------------------------------------------
+
+    # --- 🎙️ КОМАНДА: !record (ПОЧАТИ ЗАПИС) ---
+    if message.content == "!record":
+        if not message.author.voice:
+            return await message.channel.send("❌ You must be connected to a voice channel!")
+        
+        vc = message.author.voice.channel
+        voice_client = await vc.connect()
+        connections[message.guild.id] = voice_client
+        
+        voice_client.start_recording(
+            discord.sinks.WaveSink(),
+            once_done,
+            message.channel
+        )
+        return await message.channel.send(f"🔴 Started recording in **{vc.name}**! Type `!stoprecord` to stop and save.")
+
+    # --- ⏹️ КОМАНДА: !stoprecord (ЗУПИНИТИ ЗАПИС) ---
+    if message.content == "!stoprecord":
+        if message.guild.id in connections:
+            vc = connections[message.guild.id]
+            vc.stop_recording()
+            del connections[message.guild.id]
+            await message.channel.send("⏹️ Recording stopped! Processing audio...")
+        else:
+            await message.channel.send("❌ I am not recording anything right now.")
+        return
 
     # --- 💽 КОМАНДА: !disk (РЕАЛЬНА ПАМ'ЯТЬ БОТА) ---
     if message.content == "!disk":
@@ -1324,6 +1380,7 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
 
