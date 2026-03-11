@@ -45,6 +45,34 @@ MONITORING_STARTED = False
 LAST_TRAFFIC_TIME = 0.0
 last_sent_message = None
 
+# --- НАЛАШТУВАННЯ GOOGLE DRIVE ---
+def get_gdrive_service():
+    creds_json = os.environ.get("GOOGLE_CREDENTIALS")
+    if not creds_json:
+        print("❌ Немає ключа GOOGLE_CREDENTIALS!")
+        return None
+    
+    creds_dict = json.loads(creds_json)
+    creds = service_account.Credentials.from_service_account_info(
+        creds_dict, scopes=['https://www.googleapis.com/auth/drive.file']
+    )
+    return build('drive', 'v3', credentials=creds)
+
+def upload_to_gdrive(file_path, file_name):
+    service = get_gdrive_service()
+    if not service:
+        return None
+    
+    folder_id = os.environ.get("GDRIVE_FOLDER_ID")
+    file_metadata = {
+        'name': file_name,
+        'parents': [folder_id]
+    }
+    media = MediaFileUpload(file_path, mimetype='audio/wav', resumable=True)
+    file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+    return file.get('id')
+# ---------------------------------
+
 # ---------- ДОПОМІЖНІ ФУНКЦІЇ ----------
 def load_state():
     if not STATE_FILE.exists(): return {}
@@ -1296,6 +1324,7 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
 
