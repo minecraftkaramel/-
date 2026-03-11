@@ -726,6 +726,16 @@ async def on_message(message):
         return
     # -------------------------------------------------------------
 
+    # --- 🧹 КОМАНДА: !clearstats (ОЧИСТИТИ ВСЮ СТАТИСТИКУ) ---
+    if message.content == "!clearstats":
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        
+        save_weekly_stats({})
+        
+        await message.channel.send("🗑️ **Файл статистики (`weekly_stats.json`) повністю очищено!**\nТепер ти можеш додавати всі рейси наново через `!addflight`.")
+        return
+    # -------------------------------------------------------------
+
     # --- ➕ КОМАНДА: !addflight <ID> (ДОДАТИ ПРОПУЩЕНИЙ РЕЙС) ---
     if message.content.startswith("!addflight"):
         if not is_admin: return await message.channel.send("🚫 **Access Denied**")
@@ -1607,6 +1617,7 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
 
