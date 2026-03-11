@@ -698,6 +698,22 @@ async def on_message(message):
         return
     # --------------------------------------------------------
 
+    # --- 🧪 КОМАНДА: !teststats (ТЕСТОВИЙ ВИВІД СТАТИСТИКИ) ---
+    if message.content == "!teststats":
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        
+        stats = load_weekly_stats()
+        if not stats:
+            return await message.channel.send("⚠️ **Файл статистики наразі порожній (немає виконаних рейсів).**")
+            
+        await message.channel.send("🛠️ **Генерую тестовий звіт (дані НЕ очищаються)...**")
+        
+        for week_tag, s in stats.items():
+            await publish_weekly_embed(message.channel, week_tag, s)
+            
+        return
+    # -------------------------------------------------------------
+
     # --- ➕ КОМАНДА: !addflight <ID> (ДОДАТИ ПРОПУЩЕНИЙ РЕЙС) ---
     if message.content.startswith("!addflight"):
         if not is_admin: return await message.channel.send("🚫 **Access Denied**")
@@ -1579,6 +1595,7 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
 
