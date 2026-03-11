@@ -1,5 +1,0 @@
-py-cord[voice]
-PyNaCl
-aiohttp
-google-api-python-client
-google-auth
