@@ -261,10 +261,9 @@ async def publish_weekly_embed(channel, week_tag, s):
         f"╰ {format_duration(rec['shortest']['time'])} — {rec['shortest']['pilot']}{s_route}\n\n"
         
         f"### ⭐ Company Averages\n"
-        f"📈 **Average Rating:** {avg_rating}\n"
+        f"📊 **Average Rating:** {avg_rating}\n"
         f"📉 **Average FPM:** {avg_fpm} fpm | {avg_g} G\n\n"
         
-        f"### 🌍 Top Location\n"
         f"📍 **Most Popular Airport:**\n"
         f"╰ {apt_flag} **{top_apt}** — {top_apt_ops} operations"
     )
@@ -1617,6 +1616,7 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
 
