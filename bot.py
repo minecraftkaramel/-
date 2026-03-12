@@ -709,7 +709,7 @@ async def on_message(message):
         return
     # --------------------------------------------------------
 
-   # --- 🧪 КОМАНДА: !teststats (ТЕСТОВИЙ ВИВІД СТАТИСТИКИ) ---
+# --- 🧪 КОМАНДА: !teststats (ТЕСТОВИЙ ВИВІД СТАТИСТИКИ) ---
     if message.content == "!teststats":
         if not is_admin: return await message.channel.send("🚫 **Access Denied**")
         
@@ -719,31 +719,26 @@ async def on_message(message):
             
         await message.channel.send("🛠️ **Генерую тестовий звіт (із перевіркою закріплення)...**")
         
-        state = load_state()
-        
+        try:
+            pinned_msgs = await message.channel.pins()
+            for p_msg in pinned_msgs:
+                if p_msg.author == client.user and p_msg.embeds:
+                    if p_msg.embeds[0].title and "Weekly Summary" in p_msg.embeds[0].title:
+                        await p_msg.unpin()
+        except discord.Forbidden:
+            await message.channel.send("❌ **Помилка:** Немає прав 'Manage Messages' для відкріплення!")
+        except Exception as e:
+            print(f"Помилка при відкріпленні: {e}")
+            
         for week_tag, s in stats.items():
             new_msg = await publish_weekly_embed(message.channel, week_tag, s)
             
             if new_msg:
-                pin_key = f"test_pinned_{message.channel.id}"
-                old_msg_id = state.get(pin_key)
-                
-                if old_msg_id:
-                    try:
-                        old_msg = await message.channel.fetch_message(old_msg_id)
-                        await old_msg.unpin()
-                    except:
-                        pass
-                
                 try:
                     await new_msg.pin()
-                    state[pin_key] = new_msg.id
                 except discord.Forbidden:
-                    await message.channel.send("❌ **Помилка:** У бота немає прав 'Manage Messages' (Керування повідомленнями) для закріплення!")
-                except Exception as e:
-                    await message.channel.send(f"❌ **Помилка при закріпленні:** {e}")
+                    await message.channel.send("❌ **Помилка:** Немає прав 'Manage Messages' для закріплення!")
                     
-        save_state(state)
         return
     # -------------------------------------------------------------
 
@@ -1671,6 +1666,7 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
 
