@@ -193,7 +193,7 @@ async def check_and_publish_weekly_stats(channel, state):
                         if p_msg.embeds[0].title and "Weekly Summary" in p_msg.embeds[0].title:
                             await p_msg.unpin()
             except Exception as e:
-                print(f"Помилка при відкріпленні старого реального звіту: {e}")
+                print(f"Error unpinning old real report: {e}")
 
             new_msg = await publish_weekly_embed(channel, week_tag, s)
             
@@ -729,9 +729,9 @@ async def on_message(message):
         
         stats = load_weekly_stats()
         if not stats:
-            return await message.channel.send("⚠️ **Файл статистики наразі порожній (немає виконаних рейсів).**")
+            return await message.channel.send("⚠️ **Stats file is currently empty (no completed flights).**")
             
-        await message.channel.send("🛠️ **Генерую тестовий звіт (із перевіркою закріплення)...**")
+        await message.channel.send("🛠️ **Generating test report (with pin check)...**")
         
         try:
             pinned_msgs = await message.channel.pins()
@@ -740,9 +740,9 @@ async def on_message(message):
                     if p_msg.embeds[0].title and "Weekly Summary" in p_msg.embeds[0].title:
                         await p_msg.unpin()
         except discord.Forbidden:
-            await message.channel.send("❌ **Помилка:** Немає прав 'Manage Messages' для відкріплення!")
+            await message.channel.send("❌ **Error:** Missing 'Manage Messages' permission to unpin!")
         except Exception as e:
-            print(f"Помилка при відкріпленні: {e}")
+            print(f"Error unpinning: {e}")
             
         for week_tag, s in stats.items():
             new_msg = await publish_weekly_embed(message.channel, week_tag, s)
@@ -751,7 +751,7 @@ async def on_message(message):
                 try:
                     await new_msg.pin()
                 except discord.Forbidden:
-                    await message.channel.send("❌ **Помилка:** Немає прав 'Manage Messages' для закріплення!")
+                    await message.channel.send("❌ **Error:** Missing 'Manage Messages' permission to pin!")
                     
         return
     # -------------------------------------------------------------
@@ -762,7 +762,7 @@ async def on_message(message):
         
         save_weekly_stats({})
         
-        await message.channel.send("🗑️ **Файл статистики (`weekly_stats.json`) повністю очищено!**\nТепер ти можеш додавати всі рейси наново через `!addflight`.")
+        await message.channel.send("🗑️ **Stats file (`weekly_stats.json`) completely wiped!**")
         return
     # -------------------------------------------------------------
 
@@ -775,29 +775,27 @@ async def on_message(message):
             return await message.channel.send("⚠️ Usage: `!addflight <Flight_ID>`")
         
         fid = parts[1]
-        msg = await message.channel.send(f"⏳ **Шукаю рейс `{fid}` в базі Newsky...**")
+        msg = await message.channel.send(f"⏳ **Searching for flight `{fid}` in Newsky DB...**")
         
         try:
             async with aiohttp.ClientSession() as session:
                 det = await fetch_api(session, f"/flight/{fid}")
                 
                 if not det or "flight" not in det:
-                    return await msg.edit(content=f"❌ **Помилка:** Рейс `{fid}` не знайдено в API.")
+                    return await msg.edit(content=f"❌ **Error:** Flight `{fid}` not found in API.")
                 
                 f = det["flight"]
                 
-                # Визначаємо тиждень цього рейсу
                 sched_time = f.get("depTimeSched") or f.get("creationDate")
                 week_tag = get_iso_week(sched_time)
                 
-                # Записуємо у статистику
                 update_weekly_stats(f, week_tag)
                 
                 cs = f.get("flightNumber") or f.get("callsign") or "Unknown"
-                await msg.edit(content=f"✅ **Рейс `{cs}` успішно знайдено та додано до тижня `{week_tag}`!**\n*(Напиши `!stats` щоб перевірити файл)*")
+                await msg.edit(content=f"✅ **Flight `{cs}` successfully found and added to week `{week_tag}`!**")
                 
         except Exception as e:
-            await msg.edit(content=f"❌ **Сталася внутрішня помилка:** {e}")
+            await msg.edit(content=f"❌ **Internal error occurred:** {e}")
         return
     # -------------------------------------------------------------
 
@@ -809,14 +807,13 @@ async def on_message(message):
             if not WEEKLY_STATS_FILE.exists() or os.path.getsize(WEEKLY_STATS_FILE) == 0:
                 return await message.channel.send("⚠️ **Stats file (weekly_stats.json) is empty or does not exist yet.**")
                 
-            # Бронебійний спосіб відправки файлів у Discord
             with open(WEEKLY_STATS_FILE, "rb") as fp:
                 await message.channel.send(
                     content="📊 **Weekly Stats File:**", 
                     file=discord.File(fp, filename="weekly_stats.json")
                 )
         except Exception as e:
-            await message.channel.send(f"❌ **Помилка при відправці файлу:** {e}")
+            await message.channel.send(f"❌ **Error sending file:** {e}")
         return
     # --------------------------------------------------------
 
@@ -843,13 +840,13 @@ async def on_message(message):
         guild = main_channel.guild
         
         if is_all:
-            await message.channel.send(f"⏳ **Збираю АБСОЛЮТНО ВСІ доступні записи (до 90 днів) з '{guild.name}'... Це може зайняти хвилину.**")
+            await message.channel.send(f"⏳ **Gathering ALL available logs (up to 90 days) from '{guild.name}'... This may take a minute.**")
         else:
-            await message.channel.send(f"⏳ **Збираю останні {fetch_limit} записів аудиту з '{guild.name}'...**")
+            await message.channel.send(f"⏳ **Gathering the last {fetch_limit} audit logs from '{guild.name}'...**")
         
         try:
-            audit_text = f"=== Журнал аудиту: {guild.name} ===\n"
-            audit_text += f"Ліміт: {'Всі доступні (до 90 днів)' if is_all else fetch_limit}\n" + "="*50 + "\n\n"
+            audit_text = f"=== Audit Log: {guild.name} ===\n"
+            audit_text += f"Limit: {'All available (up to 90 days)' if is_all else fetch_limit}\n" + "="*50 + "\n\n"
             
             count = 0
             async for entry in guild.audit_logs(limit=fetch_limit):
@@ -857,20 +854,20 @@ async def on_message(message):
                 user = entry.user
                 action = entry.action.name
                 target = entry.target
-                reason = entry.reason or "Не вказано"
+                reason = entry.reason or "Not specified"
                 
-                audit_text += f"[{time_str}] {user} -> ДІЯ: {action}\n"
-                audit_text += f"   Об'єкт: {target}\n"
-                audit_text += f"   Причина: {reason}\n"
+                audit_text += f"[{time_str}] {user} -> ACTION: {action}\n"
+                audit_text += f"   Target: {target}\n"
+                audit_text += f"   Reason: {reason}\n"
                 audit_text += "-"*50 + "\n"
                 count += 1
                 
-            audit_text += f"\nВсього зібрано записів: {count}"
+            audit_text += f"\nTotal logs gathered: {count}"
                 
             file_bin = io.BytesIO(audit_text.encode('utf-8'))
             
             await message.channel.send(
-                content=f"✅ **Готово! Знайдено {count} записів.** Ось твій звіт:", 
+                content=f"✅ **Done! Found {count} logs.** Here is your report:", 
                 file=discord.File(file_bin, filename=f"audit_log_{'all' if is_all else fetch_limit}.txt")
             )
             
@@ -887,14 +884,14 @@ async def on_message(message):
         
         parts = message.content.split()
         if len(parts) != 2:
-            return await message.channel.send("⚠️ **Формат:** `!del <ID_повідомлення>`")
+            return await message.channel.send("⚠️ **Format:** `!del <Message_ID>`")
             
         try:
             msg_id = int(parts[1])
         except ValueError:
-            return await message.channel.send("❌ **Помилка:** ID повідомлення має бути числом.")
+            return await message.channel.send("❌ **Error:** Message ID must be a number.")
             
-        status_msg = await message.channel.send("⏳ **Шукаю повідомлення по всіх каналах...**")
+        status_msg = await message.channel.send("⏳ **Searching for message across all channels...**")
         
         found_msg = None
         
@@ -911,11 +908,11 @@ async def on_message(message):
         if found_msg:
             try:
                 await found_msg.delete()
-                await status_msg.edit(content=f"✅ **Успіх!** Повідомлення тихо знищено в каналі `#{found_msg.channel.name}` 🥷")
+                await status_msg.edit(content=f"✅ **Success!** Message silently deleted in channel `#{found_msg.channel.name}` 🥷")
             except discord.Forbidden:
-                await status_msg.edit(content="❌ **Помилка:** Знайшов повідомлення, але не маю прав на його видалення (перевір Manage Messages).")
+                await status_msg.edit(content="❌ **Error:** Found the message, but lack permission to delete it (check Manage Messages).")
         else:
-            await status_msg.edit(content="❌ **Помилка:** Повідомлення з таким ID не знайдено на сервері (або воно вже видалене).")
+            await status_msg.edit(content="❌ **Error:** Message with this ID not found on the server (or already deleted).")
             
         return
     # -------------------------------------------------------------------------
@@ -956,7 +953,7 @@ async def on_message(message):
         
         msg_id = int(parts[1])
         BANNED_WOW_MESSAGES.add(msg_id)
-        await message.channel.send(f"🛡️ **Message {msg_id} is now protected!**\nБудь-які нові реакції будуть миттєво видалятися.")
+        await message.channel.send(f"🛡️ **Message {msg_id} is now protected!**\nAny new reactions will be instantly deleted.")
         return
 
     # --- 🟢 КОМАНДА: !unbanwow <ID> (ДОЗВОЛИТИ СМАЙЛИ) ---
@@ -969,9 +966,9 @@ async def on_message(message):
         msg_id = int(parts[1])
         if msg_id in BANNED_WOW_MESSAGES:
             BANNED_WOW_MESSAGES.remove(msg_id)
-            await message.channel.send(f"✅ **Protection removed.** Тепер на повідомлення {msg_id} знову можна ставити реакції.")
+            await message.channel.send(f"✅ **Protection removed.** You can now react to message {msg_id} again.")
         else:
-            await message.channel.send("⚠️ Це повідомлення і так не знаходиться у чорному списку.")
+            await message.channel.send("⚠️ This message is not currently blacklisted.")
         return
     
     # --- 👹 КОМАНДА: !wow <ID> <EMOJI> (СТАВИТИ РЕАКЦІЮ) ---
@@ -1019,11 +1016,11 @@ async def on_message(message):
         free_mb = LIMIT_MB - temp_used_mb
         
         text = (
-            f"💽 **Реальна статистика пам'яті бота:**\n"
-            f"**Доступний ліміт:** {LIMIT_MB} MB (1 GB)\n"
-            f"**Зайнято зараз:** {temp_used_mb:.2f} MB\n"
-            f"**ВІЛЬНО ДЛЯ ЗАПИСУ:** {free_mb:.2f} MB\n"
-            f"*(Довідково: Постійна пам'ять Volume займає {volume_size_mb:.2f} MB)*"
+            f"💽 **Bot's Real Memory Stats:**\n"
+            f"**Available Limit:** {LIMIT_MB} MB (1 GB)\n"
+            f"**Currently Used:** {temp_used_mb:.2f} MB\n"
+            f"**FREE TO WRITE:** {free_mb:.2f} MB\n"
+            f"*(Reference: Volume persistent memory takes {volume_size_mb:.2f} MB)*"
         )
         return await message.channel.send(text)
     # -------------------------------------------------------------
@@ -1032,18 +1029,16 @@ async def on_message(message):
     if message.content == "!files":
         folder_path = "/app/data"
         
-        # Перевіряємо, чи існує наша "броньована" папка
         if os.path.exists(folder_path):
-            files = os.listdir(folder_path) # Отримуємо список файлів
+            files = os.listdir(folder_path)
             
             if len(files) > 0:
-                # Якщо файли є, робимо красивий список
                 file_list = "\n".join([f"📄 {file}" for file in files])
-                await message.channel.send(f"📂 **Вміст постійної папки `{folder_path}`:**\n```text\n{file_list}\n```")
+                await message.channel.send(f"📂 **Contents of persistent folder `{folder_path}`:**\n```text\n{file_list}\n```")
             else:
-                await message.channel.send(f"📂 Папка `{folder_path}` наразі абсолютно порожня.")
+                await message.channel.send(f"📂 Folder `{folder_path}` is currently completely empty.")
         else:
-            await message.channel.send(f"❌ Помилка: Папки `{folder_path}` не існує! Volume не підключено або шлях вказано невірно.")
+            await message.channel.send(f"❌ Error: Folder `{folder_path}` does not exist! Volume is not attached or the path is incorrect.")
         return
 
     # --- 🗑️ КОМАНДА: !unwow <ID> <EMOJI> (ПРИБРАТИ РЕАКЦІЮ) ---
@@ -1231,13 +1226,13 @@ async def on_message(message):
         
         parts = message.content.split(" ", 2)
         if len(parts) < 2 and not message.attachments:
-            return await message.channel.send("⚠️ **Формат:** `!msg <ID_каналу> <текст>` (і/або прикріпи картинку)")
+            return await message.channel.send("⚠️ **Format:** `!msg <Channel_ID> <text>` (and/or attach an image)")
             
         try:
             channel_id = int(parts[1])
             target_channel = client.get_channel(channel_id) 
             if not target_channel:
-                return await message.channel.send("❌ **Помилка:** Канал з таким ID не знайдено.")
+                return await message.channel.send("❌ **Error:** Channel with this ID not found.")
                 
             text_to_send = parts[2] if len(parts) > 2 else ""
             
@@ -1246,7 +1241,7 @@ async def on_message(message):
                 files_to_send.append(await attachment.to_file())
                 
             if not text_to_send and not files_to_send:
-                return await message.channel.send("⚠️ **Помилка:** Немає тексту або картинки для відправки.")
+                return await message.channel.send("⚠️ **Error:** No text or image to send.")
                 
             sent_msg = await target_channel.send(content=text_to_send, files=files_to_send)
             
@@ -1255,9 +1250,9 @@ async def on_message(message):
             await message.add_reaction("✅") 
             
         except ValueError:
-            await message.channel.send("❌ **Помилка:** ID каналу має бути числом.")
+            await message.channel.send("❌ **Error:** Channel ID must be a number.")
         except Exception as e:
-            await message.channel.send(f"❌ **Помилка при відправці:** {e}")
+            await message.channel.send(f"❌ **Error sending message:** {e}")
         return
     # -------------------------------------------------------------------------
     
@@ -1663,9 +1658,9 @@ async def on_raw_reaction_add(payload):
 
             await message.remove_reaction(payload.emoji, user)
         except discord.Forbidden:
-            print("⚠️ Помилка: Бот не має права 'Manage Messages' (Керування повідомленнями) на сервері!")
+            print("⚠️ Error: Bot lacks 'Manage Messages' permission on the server!")
         except Exception as e:
-            print(f"Помилка при видаленні реакції: {e}")
+            print(f"Error removing reaction: {e}")
 
 # --- 🚀 ЗАПУСК ГОЛОВНОГО ЦИКЛУ ---
 @client.event
@@ -1680,18 +1675,3 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
