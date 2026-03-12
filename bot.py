@@ -88,7 +88,7 @@ def init_week_stats():
     return {
         "flights": 0, "earnings": 0, "pax": 0, "cargo": 0,
         "rating_sum": 0.0, "fpm_sum": 0, "g_sum": 0.0,
-        "pilots": {}, "airports": {},
+        "pilots": {}, "airports": {}, "aircrafts": {},
         "records": {
             "butter": {"fpm": -99999, "g": 0.0, "pilot": "None"},
             "hardest": {"fpm": 0, "g": 0.0, "pilot": "None"},
@@ -119,6 +119,11 @@ def update_weekly_stats(f, week_tag):
     dep = f.get("dep", {}).get("icao", "???")
     arr = f.get("arr", {}).get("icao", "???")
     
+    ac_data = f.get("aircraft", {})
+    ac_icao = "Unknown"
+    if isinstance(ac_data, dict):
+        ac_icao = ac_data.get("icao") or ac_data.get("airframe", {}).get("icao") or "Unknown"
+    
     check_g, check_fpm = 0.0, 0
     if "result" in f and "violations" in f["result"]:
         for v in f["result"]["violations"]:
@@ -144,6 +149,10 @@ def update_weekly_stats(f, week_tag):
     s["pilots"][pilot] = s["pilots"].get(pilot, 0) + 1
     s["airports"][dep] = s["airports"].get(dep, 0) + 1
     s["airports"][arr] = s["airports"].get(arr, 0) + 1
+    
+    if "aircrafts" not in s: s["aircrafts"] = {}
+    if ac_icao != "Unknown":
+        s["aircrafts"][ac_icao] = s["aircrafts"].get(ac_icao, 0) + 1
     
     if fpm_val < 0 and fpm_val > s["records"]["butter"]["fpm"]:
         s["records"]["butter"] = {"fpm": fpm_val, "g": check_g, "pilot": pilot}
@@ -216,6 +225,10 @@ async def publish_weekly_embed(channel, week_tag, s):
     top_apt = max(s["airports"], key=s["airports"].get) if s["airports"] else "None"
     top_apt_ops = s["airports"].get(top_apt, 0)
     
+    ac_dict = s.get("aircrafts", {})
+    top_ac = max(ac_dict, key=ac_dict.get) if ac_dict else "None"
+    top_ac_flights = ac_dict.get(top_ac, 0)
+    
     db_data = AIRPORTS_DB.get(top_apt.upper(), {})
     apt_flag = get_flag(db_data.get("country", "XX"))
     
@@ -263,7 +276,10 @@ async def publish_weekly_embed(channel, week_tag, s):
         f"📉 **Average FPM:** {avg_fpm} fpm | {avg_g} G\n\n"
         
         f"📍 **Most Popular Airport:**\n"
-        f"╰ {apt_flag} **{top_apt}** — {top_apt_ops} operations"
+        f"╰ {apt_flag} **{top_apt}** — {top_apt_ops} operations\n\n"
+        
+        f"✈️ **Most Popular Aircraft:**\n"
+        f"╰ **{top_ac}** — {top_ac_flights} flights"
     )
     
     embed = discord.Embed(
@@ -1664,6 +1680,7 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
 
