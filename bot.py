@@ -177,22 +177,20 @@ async def check_and_publish_weekly_stats(channel, state):
                 break
                 
         if not active_flight_exists:
+            try:
+                pinned_msgs = await channel.pins()
+                for p_msg in pinned_msgs:
+                    if p_msg.author == client.user and p_msg.embeds:
+                        if p_msg.embeds[0].title and "Weekly Summary" in p_msg.embeds[0].title:
+                            await p_msg.unpin()
+            except Exception as e:
+                print(f"Помилка при відкріпленні старого реального звіту: {e}")
+
             new_msg = await publish_weekly_embed(channel, week_tag, s)
             
             if new_msg:
-                # 📌 Відкріплюємо старий звіт (якщо він є в пам'яті)
-                old_msg_id = state.get("pinned_report_id")
-                if old_msg_id:
-                    try:
-                        old_msg = await channel.fetch_message(old_msg_id)
-                        await old_msg.unpin()
-                    except:
-                        pass # Якщо повідомлення вже видалене вручну, просто ігноруємо
-                
-                # 📌 Закріплюємо новий звіт і запам'ятовуємо його ID
                 try:
                     await new_msg.pin()
-                    state["pinned_report_id"] = new_msg.id
                 except Exception as e:
                     print(f"Error pinning message: {e}")
 
@@ -1666,6 +1664,7 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
 
