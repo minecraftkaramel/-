@@ -1194,39 +1194,33 @@ async def on_message(message):
         return
     # ------------------------------------------------
 
-    # --- ✉️ КОМАНДА: !msg <ID_каналу> <текст> (+ МОЖНА ПРИКРІПЛЯТИ КАРТИНКИ) ---
+   # --- ✉️ КОМАНДА: !msg <ID_каналу> <текст> (+ МОЖНА ПРИКРІПЛЯТИ КАРТИНКИ) ---
     if message.content.startswith("!msg"):
         if not is_admin: return await message.channel.send("🚫 **Access Denied**")
         
-        # Розбиваємо повідомлення на 3 частини: команду, ID каналу і сам текст
         parts = message.content.split(" ", 2)
-        if len(parts) < 2:
-            return await message.channel.send("⚠️ **Формат:** `!msg <ID_каналу> <текст>` (і можеш прикріпити картинку)")
+        if len(parts) < 2 and not message.attachments:
+            return await message.channel.send("⚠️ **Формат:** `!msg <ID_каналу> <текст>` (і/або прикріпи картинку)")
             
         try:
             channel_id = int(parts[1])
-            # Шукаємо канал на сервері
-            target_channel = message.guild.get_channel(channel_id) 
+            target_channel = client.get_channel(channel_id) 
             if not target_channel:
-                return await message.channel.send("❌ **Помилка:** Канал з таким ID не знайдено на цьому сервері.")
+                return await message.channel.send("❌ **Помилка:** Канал з таким ID не знайдено.")
                 
-            # Дістаємо текст (якщо він є)
             text_to_send = parts[2] if len(parts) > 2 else ""
             
-            # Збираємо всі прикріплені файли (картинки, гіфки тощо)
             files_to_send = []
             for attachment in message.attachments:
-                # Конвертуємо у формат файлу Discord
                 files_to_send.append(await attachment.to_file())
                 
-            # Перевірка: чи є взагалі що відправляти
             if not text_to_send and not files_to_send:
                 return await message.channel.send("⚠️ **Помилка:** Немає тексту або картинки для відправки.")
                 
-            # Відправляємо магію в цільовий канал 🪄
-            await target_channel.send(content=text_to_send, files=files_to_send)
+            sent_msg = await target_channel.send(content=text_to_send, files=files_to_send)
             
-            # Бот просто поставить галочку на твоє повідомлення, щоб ти знав, що все ок
+            last_sent_message = sent_msg
+            
             await message.add_reaction("✅") 
             
         except ValueError:
@@ -1655,6 +1649,7 @@ async def on_ready():
     client.loop.create_task(main_loop())
 
 client.run(DISCORD_TOKEN)
+
 
 
 
