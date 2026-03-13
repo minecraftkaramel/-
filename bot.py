@@ -26,7 +26,7 @@ START_TIME = datetime.now(timezone.utc)
 
 STATE_FILE = Path("/app/data/sent.json")
 STATUS_FILE = Path("/app/data/statuses.json")
-WEEKLY_STATS_FILE = Path("/app/data/weekly_stats.json") # 🔥 ФАЙЛ ДЛЯ СТАТИСТИКИ
+WEEKLY_STATS_FILE = Path("/app/data/weekly_stats.json")
 CHECK_INTERVAL = 30
 BASE_URL = "https://newsky.app/api/airline-api"
 AIRPORTS_DB_URL = "https://raw.githubusercontent.com/mwgg/Airports/master/airports.json"
@@ -469,11 +469,49 @@ def get_landing_data(f, details_type):
     
     return "📉 **N/A**"
 
+# Додаємо глобальні змінні для нашої черги (Lock створимо пізніше)
+API_LOCK = None
+REQUEST_TIMES = []
+
 async def fetch_api(session, path, method="GET", body=None):
+    global REQUEST_TIMES, API_LOCK
+    
+    # "Лінива" ініціалізація замка (безпечно для будь-якої версії Python)
+    if API_LOCK is None:
+        API_LOCK = asyncio.Lock()
+    
+    # 1. СТАЄМО В ЧЕРГУ
+    async with API_LOCK:
+        now = time.time()
+        
+        # Очищаємо історію від старих запитів (ті, що були понад 10 секунд тому)
+        REQUEST_TIMES = [t for t in REQUEST_TIMES if now - t < 10.0]
+        
+        # Якщо в нашій пам'яті вже є 5 запитів за останні 10 сек — вмикаємо гальма
+        if len(REQUEST_TIMES) >= 5:
+            oldest_request = REQUEST_TIMES[0]
+            wait_time = 10.0 - (now - oldest_request)
+            
+            if wait_time > 0:
+                print(f"🚦 API Limit: Черга чекає {wait_time:.2f} сек... (Запит: {path})")
+                await asyncio.sleep(wait_time)
+        
+        # Перед виходом з черги записуємо свій точний час
+        REQUEST_TIMES.append(time.time())
+
+    # 2. РОБИМО ЗАПИТ
     try:
         async with session.request(method, f"{BASE_URL}{path}", headers=HEADERS, json=body, timeout=10) as r:
-            return await r.json() if r.status == 200 else None
-    except: return None
+            if r.status == 200:
+                return await r.json()
+            elif r.status == 429:
+                print(f"⚠️ Зловили 429 Too Many Requests на {path}! Сервер просить пригальмувати.")
+                return None
+            else:
+                return None
+    except Exception as e:
+        print(f"⚠️ API Error ({path}): {e}")
+        return None
 
 # ---------- MESSAGE GENERATOR ----------
 async def send_flight_message(channel, status, f, details_type="ongoing", reply_to_id=None):
@@ -1279,11 +1317,32 @@ async def on_message(message):
             ongoing = await fetch_api(session, "/flights/ongoing")
             
             if not ongoing or "results" not in ongoing or len(ongoing["results"]) == 0:
-                embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic Air Alliance", description="🛬 No active flights.", color=0xf1c40f)
+                embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic Air Alliance", description="\n\n".join(desc_lines), color=0x3498db)
                 return await msg.edit(content=None, embed=embed)
             
             desc_lines = []
-            for f in ongoing["results"]:
+            for raw_f in ongoing["results"]:
+                fid = str(raw_f.get("_id") or raw_f.get("id"))
+                
+                det = await fetch_api(session, f"/flight/{fid}")
+                
+                alt_str, gs_str = "---", "---"
+                
+                if det and "flight" in det:
+                    f = det["flight"]
+                    last_state = f.get("lastState", {})
+                    
+                    loc = last_state.get("location", {})
+                    spd = last_state.get("speed", {})
+                    
+                    alt_ft = int(loc.get("alt", 0))
+                    alt_str = f"{alt_ft} ft"
+                    
+                    gs_kts = int(spd.get("gs", 0))
+                    gs_str = f"{gs_kts} kts"
+                else:
+                    f = raw_f
+
                 cs = f.get("flightNumber") or f.get("callsign") or "N/A"
                 airline = f.get("airline", {}).get("icao", "")
                 full_cs = f"{airline} {cs}".strip() if airline else cs
@@ -1299,7 +1358,7 @@ async def on_message(message):
                 dep = f.get("dep", {}).get("icao", "???") if isinstance(f.get("dep"), dict) else "???"
                 arr = f.get("arr", {}).get("icao", "???") if isinstance(f.get("arr"), dict) else "???"
                 
-                desc_lines.append(f"{full_cs} • {pilot} • {ac} • {dep} ➔ {arr}")
+                desc_lines.append(f"**{full_cs}** • {pilot} • {ac} • {dep} ➔ {arr}\n╰ 🏔️ {alt_str}  |  💨 {gs_str}")
             
             embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic Air Alliance", description="\n".join(desc_lines), color=0x3498db)
             
@@ -1554,9 +1613,6 @@ async def main_loop():
                         if state[fid].get("takeoff"):
                             continue
                             
-                        # --- 2. ШТУЧНА ЧЕРГА (ТРОТТЛІНГ) ---
-                        await asyncio.sleep(2.5)
-                        
                         det = await fetch_api(session, f"/flight/{fid}")
                         if not det or "flight" not in det: continue
                         f = det["flight"]
@@ -1586,6 +1642,7 @@ async def main_loop():
                         # --- ЛОГІКА ДЛЯ ЗАКРИТИХ ТА ВИДАЛЕНИХ РЕЙСІВ ---
                         if raw_f.get("close"):
                             print(f"⏳ Waiting for calculation: {fid}")
+							
                             await asyncio.sleep(3)
                             
                             det = await fetch_api(session, f"/flight/{fid}")
@@ -1613,7 +1670,6 @@ async def main_loop():
                             print(f"✅ Report Sent: {cs}")
                         
                         elif raw_f.get("deleted"):
-                            await asyncio.sleep(2.5)
                             
                             det = await fetch_api(session, f"/flight/{fid}")
                             if not det or "flight" not in det: continue
