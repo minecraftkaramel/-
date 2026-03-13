@@ -1458,6 +1458,106 @@ async def on_message(message):
         return
     # -------------------------------------------------------------
 
+	# --- 🕵️‍♂️ КОМАНДА: !findchannel <назва> (ЗНАЙТИ ID КАНАЛУ ЗА НАЗВОЮ) ---
+    if message.content.startswith("!findchannel"):
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        
+        parts = message.content.split(" ", 1)
+        if len(parts) < 2:
+            return await message.channel.send("⚠️ Usage: `!findchannel <name>`")
+            
+        search_name = parts[1].lower()
+        
+        # Шукаємо сервер через основний канал
+        main_channel = client.get_channel(CHANNEL_ID)
+        guild = main_channel.guild if main_channel else message.guild
+        
+        if not guild:
+            return await message.channel.send("❌ **Error:** Cannot determine the server.")
+            
+        found_channels = []
+        # Проходимося по всіх каналах сервера (текстові, голосові, категорії)
+        for channel in guild.channels:
+            if search_name in channel.name.lower():
+                # Визначаємо тип каналу для зручності
+                c_type = "Text" if isinstance(channel, discord.TextChannel) else "Voice" if isinstance(channel, discord.VoiceChannel) else "Category/Other"
+                found_channels.append(f"📁 **{channel.name}** ({c_type}) — ID: `{channel.id}`")
+                
+        if found_channels:
+            res = "\n".join(found_channels)
+            await message.channel.send(f"🔍 **Search results for '{parts[1]}':**\n{res}")
+        else:
+            await message.channel.send(f"❌ **No channels found matching:** `{parts[1]}`")
+        return
+    # -------------------------------------------------------------
+
+	# --- 🕵️‍♂️ КОМАНДА: !spychan <ID> [кількість] (ПРОЧИТАТИ ЧУЖИЙ КАНАЛ) ---
+    if message.content.startswith("!spychan"):
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        
+        parts = message.content.split()
+        if len(parts) < 2 or not parts[1].isdigit():
+            return await message.channel.send("⚠️ Usage: `!spychan <Channel_ID> [limit]`")
+            
+        channel_id = int(parts[1])
+        # За замовчуванням беремо останні 50 повідомлень, але можна вказати свою цифру
+        limit = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 50
+        
+        # Шукаємо канал
+        target_channel = client.get_channel(channel_id)
+        if not target_channel:
+            try:
+                target_channel = await client.fetch_channel(channel_id)
+            except:
+                return await message.channel.send("❌ **Error:** Channel not found. Check the ID.")
+                
+        # Перевіряємо, чи це текстовий канал
+        if not hasattr(target_channel, 'history'):
+            return await message.channel.send("❌ **Error:** This channel type does not have message history (might be a pure voice channel).")
+            
+        await message.channel.send(f"🕵️ **Spying on `#{target_channel.name}`... Fetching last {limit} messages.**")
+        
+        try:
+            chat_log = f"=== SPY LOG: #{target_channel.name} ===\n"
+            chat_log += f"Limit: Last {limit} messages\n" + "="*50 + "\n\n"
+            
+            count = 0
+            
+            # Збираємо повідомлення і перевертаємо список (щоб читати зверху вниз, від старих до нових)
+            messages = [msg async for msg in target_channel.history(limit=limit)]
+            messages.reverse()
+            
+            for msg in messages:
+                time_str = msg.created_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+                author = msg.author.name
+                # clean_content прибирає згадки, щоб було гарно читати
+                content = msg.clean_content or "[No text / Sticker / Embed]"
+                
+                # Додаємо посилання на прикріплені картинки/файли, якщо вони є
+                atts = [a.url for a in msg.attachments]
+                att_str = f"\n   📎 Attachments: {', '.join(atts)}" if atts else ""
+                
+                chat_log += f"[{time_str}] {author}: {content}{att_str}\n"
+                chat_log += "-"*40 + "\n"
+                count += 1
+                
+            if count == 0:
+                return await message.channel.send(f"📭 **The channel `#{target_channel.name}` is completely empty.**")
+                
+            # Пакуємо все у файл, щоб обійти ліміт Discord на 2000 символів
+            file_bin = io.BytesIO(chat_log.encode('utf-8'))
+            await message.channel.send(
+                content=f"✅ **Done! Here is the log of the last {count} messages from `#{target_channel.name}`:**", 
+                file=discord.File(file_bin, filename=f"spy_{target_channel.name}.txt")
+            )
+            
+        except discord.Forbidden:
+            await message.channel.send("❌ **Error:** I don't have the 'Read Message History' permission for that channel.")
+        except Exception as e:
+            await message.channel.send(f"❌ **Error:** {e}")
+        return
+    # -------------------------------------------------------------
+
     # --- 📚 КОМАНДА: !help (ДИНАМІЧНА ДЛЯ КОРИСТУВАЧІВ, АДМІНІВ ТА ВЛАСНИКА) ---
     if message.content == "!help":
         is_owner = message.author.id in ADMIN_IDS
