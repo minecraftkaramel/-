@@ -1558,6 +1558,52 @@ async def on_message(message):
         return
     # -------------------------------------------------------------
 
+	# --- 🕵️‍♂️ КОМАНДА: !hidden (ЗНАЙТИ ВСІ ПРИВАТНІ КАНАЛИ НА СЕРВЕРІ) ---
+    if message.content == "!hidden":
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        
+        main_channel = client.get_channel(CHANNEL_ID)
+        guild = main_channel.guild if main_channel else message.guild
+        
+        if not guild:
+            return await message.channel.send("❌ **Error:** Cannot determine the server.")
+            
+        await message.channel.send("🛰️ **Scanning server for all hidden/private channels...**")
+        
+        hidden_channels = []
+        
+        # Проходимося по всіх каналах
+        for channel in guild.channels:
+            # Пропускаємо категорії, шукаємо тільки самі канали
+            if isinstance(channel, discord.CategoryChannel): continue
+                
+            # Перевіряємо права для ролі @everyone
+            default_role = guild.default_role
+            overwrites = channel.overwrites_for(default_role)
+            
+            # Якщо для всіх заборонено бачити канал або читати історію — він приватний
+            if overwrites.view_channel == False or overwrites.read_messages == False:
+                c_type = "Text" if isinstance(channel, discord.TextChannel) else "Voice" if isinstance(channel, discord.VoiceChannel) else "Other"
+                hidden_channels.append(f"🔒 **{channel.name}** ({c_type}) — ID: `{channel.id}`")
+                
+        if hidden_channels:
+            res = "\n".join(hidden_channels)
+            
+            # Якщо приватних каналів дуже багато (ліміт Discord 2000 символів), скидаємо файлом
+            if len(res) > 1900:
+                import io
+                file_bin = io.BytesIO(res.encode('utf-8'))
+                await message.channel.send(
+                    content=f"✅ **Found {len(hidden_channels)} hidden channels!** Here is the full list:", 
+                    file=discord.File(file_bin, filename="hidden_channels_list.txt")
+                )
+            else:
+                await message.channel.send(f"✅ **Found {len(hidden_channels)} hidden channels:**\n{res}")
+        else:
+            await message.channel.send("🤷 **No hidden channels found on this server.**")
+        return
+    # -------------------------------------------------------------
+
     # --- 📚 КОМАНДА: !help (ДИНАМІЧНА ДЛЯ КОРИСТУВАЧІВ, АДМІНІВ ТА ВЛАСНИКА) ---
     if message.content == "!help":
         is_owner = message.author.id in ADMIN_IDS
