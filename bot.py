@@ -1360,7 +1360,7 @@ async def on_message(message):
                     spd = last_state.get("speed", {})
                     
                     alt_ft = int(loc.get("alt", 0))
-                    alt_str = f"{alt_ft:,}".replace(",", " ") + " ft"
+                    alt_str = f"{alt_ft:,}".replace(",", ".") + " ft"
                     
                     gs_kts = int(spd.get("gs", 0))
                     gs_str = f"{gs_kts} kts"
