@@ -809,14 +809,14 @@ async def on_message(message):
             "rating_sum": 1215.2, # 1215.2 / 124 = 9.8 avg
             "fpm_sum": -21080,    # -21080 / 124 = -170 fpm avg
             "g_sum": 142.6,       # 142.6 / 124 = 1.15 G avg
-            "pilots": {"Pilot Name": 54, "Test Captain": 40, "First Officer Doe": 30},
+            "pilots": {"Pilot Name": 54, "Pilot Name": 40, "Pilot Name": 30},
             "airports": {"UKBB": 80, "LOWW": 24, "KJFK": 20},
             "aircrafts": {"B738": 90, "A320": 34},
             "records": {
-                "butter": {"fpm": -45, "g": 1.02, "pilot": "Smooth Operator"},
-                "hardest": {"fpm": -650, "g": 1.85, "pilot": "Rough Lander"},
-                "longest": {"time": 540, "pilot": "Endurance Flyer", "dep": "UKBB", "arr": "KJFK"},
-                "shortest": {"time": 35, "pilot": "Sprinter", "dep": "UKBB", "arr": "UKLL"}
+                "butter": {"fpm": -45, "g": 1.02, "pilot": "Pilot Name"},
+                "hardest": {"fpm": -650, "g": 1.85, "pilot": "Pilot Name"},
+                "longest": {"time": 540, "pilot": "Pilot Name", "dep": "UKBB", "arr": "KJFK"},
+                "shortest": {"time": 35, "pilot": "Pilot Name", "dep": "UKBB", "arr": "UKLL"}
             }
         }
         
