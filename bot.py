@@ -42,6 +42,7 @@ BANNED_WOW_MESSAGES = set()
 MONITORING_STARTED = False
 LAST_TRAFFIC_TIME = 0.0
 last_sent_message = None
+PERSISTENT_VC_ID = None
 
 # ---------- ДОПОМІЖНІ ФУНКЦІЇ ----------
 def load_state():
@@ -1394,13 +1395,14 @@ async def on_message(message):
         return
     # -------------------------------------------------------------
 
-    # --- 🎤 КОМАНДА: !enter <Channel_ID> (Зайти в голосовий канал) ---
+	# --- 🎤 КОМАНДА: !enter <Channel_ID> (ЗАЛІЗНА ПРИВ'ЯЗКА ДО КАНАЛУ) ---
     if message.content.startswith("!enter"):
         if not is_admin: return await message.channel.send("🚫 **Access Denied**")
         parts = message.content.split()
         if len(parts) < 2 or not parts[1].isdigit():
             return await message.channel.send("⚠️ Usage: `!enter <Voice_Channel_ID>`")
 
+        global PERSISTENT_VC_ID
         vc_id = int(parts[1])
         target_vc = client.get_channel(vc_id)
 
@@ -1410,13 +1412,32 @@ async def on_message(message):
         guild = target_vc.guild
 
         if guild.voice_client:
-            await guild.voice_client.disconnect()
+            await guild.voice_client.disconnect(force=True)
 
         try:
             await target_vc.connect()
-            await message.channel.send(f"✅ **Bot joined channel:** {target_vc.name}")
+            PERSISTENT_VC_ID = vc_id
+            await message.channel.send(f"✅ **Bot locked into channel:** {target_vc.name}. Terminator mode ON.")
         except Exception as e:
             await message.channel.send(f"❌ **Error:** {e}\n*(Make sure `PyNaCl` is in your requirements.txt)*")
+        return
+    # -------------------------------------------------------------
+
+    # --- 🚪 КОМАНДА: !leave (ЗНЯТИ ПРИВ'ЯЗКУ ТА ВИЙТИ) ---
+    if message.content == "!leave":
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+
+        global PERSISTENT_VC_ID
+        PERSISTENT_VC_ID = None # 🟢 Знімаємо наказ
+
+        main_channel = client.get_channel(CHANNEL_ID)
+        guild = message.guild if message.guild else (main_channel.guild if main_channel else None)
+
+        if guild and guild.voice_client:
+            await guild.voice_client.disconnect()
+            await message.channel.send("✅ **Bot released and left the voice channel.**")
+        else:
+            await message.channel.send("⚠️ **Bot is already not in a voice channel.**")
         return
     # -------------------------------------------------------------
 
@@ -1440,21 +1461,6 @@ async def on_message(message):
             await message.channel.send(f"✅ {status_text}")
         except Exception as e:
             await message.channel.send(f"❌ **Error:** {e}")
-        return
-    # -------------------------------------------------------------
-
-    # --- 🚪 КОМАНДА: !leave (Вийти з голосового) ---
-    if message.content == "!leave":
-        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
-
-        main_channel = client.get_channel(CHANNEL_ID)
-        guild = message.guild if message.guild else (main_channel.guild if main_channel else None)
-
-        if guild and guild.voice_client:
-            await guild.voice_client.disconnect()
-            await message.channel.send("✅ **Bot left the voice channel.**")
-        else:
-            await message.channel.send("⚠️ **Bot is already not in a voice channel.**")
         return
     # -------------------------------------------------------------
 
@@ -1741,6 +1747,32 @@ async def on_raw_reaction_add(payload):
             print("⚠️ Error: Bot lacks 'Manage Messages' permission on the server!")
         except Exception as e:
             print(f"Error removing reaction: {e}")
+
+# --- 🦾 ТЕРМІНАТОР-РАДАР (МИТТЄВЕ ПОВЕРНЕННЯ В ГОЛОСОВИЙ КАНАЛ) ---
+@client.event
+async def on_voice_state_update(member, before, after):
+    global PERSISTENT_VC_ID
+    
+    if member == client.user and PERSISTENT_VC_ID:
+        
+        if after.channel is None or after.channel.id != PERSISTENT_VC_ID:
+            print(f"⚠️ Bot was disconnected or moved! INSTANT reconnecting...")
+            
+            target_vc = client.get_channel(PERSISTENT_VC_ID)
+            if target_vc:
+                try:
+                    if member.guild.voice_client:
+                        await member.guild.voice_client.disconnect(force=True)
+                        
+                    await target_vc.connect()
+                    print(f"✅ INSTANTLY reconnected to {target_vc.name}.")
+                    
+                    if member.guild.voice_client:
+                        await member.guild.change_voice_state(channel=target_vc, self_mute=True)
+                        
+                except Exception as e:
+                    print(f"❌ Auto-reconnect failed: {e}")
+# -------------------------------------------------------------
 
 # --- 🚀 ЗАПУСК ГОЛОВНОГО ЦИКЛУ ---
 @client.event
