@@ -761,38 +761,68 @@ async def on_message(message):
         return
     # --------------------------------------------------------
 
-# --- 🧪 КОМАНДА: !teststats (ТЕСТОВИЙ ВИВІД СТАТИСТИКИ) ---
+# --- 🧪 КОМАНДА 1: !teststats (ЗІ ЗАКРІПЛЕННЯМ ТА ВІДКРІПЛЕННЯМ) ---
     if message.content == "!teststats":
         if not is_admin: return await message.channel.send("🚫 **Access Denied**")
-        
         stats = load_weekly_stats()
-        if not stats:
-            return await message.channel.send("⚠️ **Stats file is currently empty (no completed flights).**")
-            
-        await message.channel.send("🛠️ **Generating test report (with pin check)...**")
+        if not stats: return await message.channel.send("⚠️ **Stats file is empty.**")
         
+        await message.channel.send("🛠️ **Generating real report (WITH pins)...**")
         try:
             pinned_msgs = await message.channel.pins()
             for p_msg in pinned_msgs:
-                if p_msg.author == client.user and p_msg.embeds:
-                    if p_msg.embeds[0].title and "Weekly Summary" in p_msg.embeds[0].title:
-                        await p_msg.unpin()
-        except discord.Forbidden:
-            await message.channel.send("❌ **Error:** Missing 'Manage Messages' permission to unpin!")
+                if p_msg.author == client.user and p_msg.embeds and p_msg.embeds[0].title and "Weekly Summary" in p_msg.embeds[0].title:
+                    await p_msg.unpin()
         except Exception as e:
             print(f"Error unpinning: {e}")
             
         for week_tag, s in stats.items():
             new_msg = await publish_weekly_embed(message.channel, week_tag, s)
-            
             if new_msg:
-                try:
-                    await new_msg.pin()
-                except discord.Forbidden:
-                    await message.channel.send("❌ **Error:** Missing 'Manage Messages' permission to pin!")
-                    
+                try: await new_msg.pin()
+                except Exception as e: print(f"Error pinning: {e}")
         return
-    # -------------------------------------------------------------
+
+    # --- 📌 КОМАНДА 2: !teststatsnopin (БЕЗ ЗАКРІПЛЕННЯ) ---
+    if message.content == "!teststatsnopin":
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        stats = load_weekly_stats()
+        if not stats: return await message.channel.send("⚠️ **Stats file is empty.**")
+        
+        await message.channel.send("🛠️ **Generating real report (NO pins)...**")
+        for week_tag, s in stats.items():
+            await publish_weekly_embed(message.channel, week_tag, s)
+        return
+
+    # --- 🤡 КОМАНДА 3: !teststatstest (ФЕЙКОВІ ДАНІ ДЛЯ ПРЕЗЕНТАЦІЇ) ---
+    if message.content == "!teststatstest":
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        
+        await message.channel.send("🛠️ **Generating presentation report (Fake Data)...**")
+        
+        # Генеруємо красиві штучні дані
+        dummy_s = {
+            "flights": 124, 
+            "earnings": 1450800, 
+            "pax": 18500, 
+            "cargo": 45000,
+            "rating_sum": 1215.2, # 1215.2 / 124 = 9.8 avg
+            "fpm_sum": -21080,    # -21080 / 124 = -170 fpm avg
+            "g_sum": 142.6,       # 142.6 / 124 = 1.15 G avg
+            "pilots": {"Pilot Name": 54, "Test Captain": 40, "First Officer Doe": 30},
+            "airports": {"UKBB": 80, "LOWW": 24, "KJFK": 20},
+            "aircrafts": {"B738": 90, "A320": 34},
+            "records": {
+                "butter": {"fpm": -45, "g": 1.02, "pilot": "Smooth Operator"},
+                "hardest": {"fpm": -650, "g": 1.85, "pilot": "Rough Lander"},
+                "longest": {"time": 540, "pilot": "Endurance Flyer", "dep": "UKBB", "arr": "KJFK"},
+                "shortest": {"time": 35, "pilot": "Sprinter", "dep": "UKBB", "arr": "UKLL"}
+            }
+        }
+        
+        current_week = get_iso_week()
+        await publish_weekly_embed(message.channel, current_week, dummy_s)
+        return
 
     # --- 🧹 КОМАНДА: !clearstats (ОЧИСТИТИ ВСЮ СТАТИСТИКУ) ---
     if message.content == "!clearstats":
