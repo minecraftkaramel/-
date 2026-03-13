@@ -1063,6 +1063,30 @@ async def on_message(message):
         return await message.channel.send(text)
     # -------------------------------------------------------------
 
+	# --- 🔍 КОМАНДА: !idemoji <назва> (ДІЗНАТИСЯ КОД ЕМОДЗІ) ---
+    if message.content.startswith("!idemoji"):
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        parts = message.content.split()
+        if len(parts) < 2:
+            return await message.channel.send("⚠️ Usage: `!idemoji <name>` (without colons)")
+        
+        if not message.guild:
+            return await message.channel.send("⚠️ Please use this command in a server channel, not in DM.")
+
+        emoji_name = parts[1].replace(":", "") # Прибираємо двокрапки, якщо випадково написав
+        
+        # Шукаємо емодзі на сервері
+        found_emoji = discord.utils.get(message.guild.emojis, name=emoji_name)
+        
+        if found_emoji:
+            # Формуємо правильний код (з 'a', якщо анімований)
+            emoji_code = f"<{'a' if found_emoji.animated else ''}:{found_emoji.name}:{found_emoji.id}>"
+            await message.channel.send(f"✅ **Found it!**\nCopy this code:\n`{emoji_code}`\n\nPreview: {emoji_code}")
+        else:
+            await message.channel.send(f"❌ **Error:** Emoji named `{emoji_name}` not found on this server.")
+        return
+    # -------------------------------------------------------------
+
     # --- 📂 КОМАНДА: !files (ВМІСТ ПОСТІЙНОЇ ПАМ'ЯТІ / VOLUME) ---
     if message.content == "!files":
         folder_path = "/app/data"
