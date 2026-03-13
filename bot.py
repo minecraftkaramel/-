@@ -477,9 +477,13 @@ def get_landing_data(f, details_type):
         
         wind_str = ""
         if weather and "windDir" in weather:
-            w_dir = int(weather.get("windDir", 0))
+            w_dir = int(round(weather.get("windDir", 0)))
             w_spd = int(round(weather.get("windSpd", 0)))
             w_x = int(round(abs(weather.get("windX", 0))))
+            
+            if w_dir == 0 and w_spd > 0: 
+                w_dir = 360
+                
             wind_str = f"\n💨 **{w_dir}° | {w_spd} kt** (crosswind: {w_x} kt)"
             
         return f"📉 **{fpm_val} fpm**{g_str}{wind_str}"
