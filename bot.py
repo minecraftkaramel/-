@@ -437,24 +437,33 @@ def get_rating_square(rating):
         return "🟥"
     except: return "⬜"
 
-# --- FPM + G-Force Search ---
+# --- FPM + G-Force + Wind Search ---
 def get_landing_data(f, details_type):
     if details_type == "test":
         fpm = -random.randint(50, 400)
         g = round(random.uniform(0.9, 1.8), 2)
-        return f"📉 **{fpm} fpm**, **{g} G**"
+        return f"📉 **{fpm} fpm**, **{g} G**\n💨 **220° | 3 kt** (crosswind: 2 kt)"
 
     fpm, g_force, found = 0, 0.0, False
+    weather = {}
+
     if "result" in f and "violations" in f["result"]:
         for v in f["result"]["violations"]:
-            td = v.get("entry", {}).get("payload", {}).get("touchDown", {})
+            payload = v.get("entry", {}).get("payload", {})
+            td = payload.get("touchDown", {})
             if td:
-                fpm, g_force, found = int(td.get("rate", 0)), float(td.get("gForce", 0)), True
-                if found: break
+                fpm = int(td.get("rate", 0))
+                g_force = float(td.get("gForce", 0))
+                weather = payload.get("weather", {})
+                found = True
+                break
 
     if not found and "landing" in f and f["landing"]:
-        td = f["landing"]
-        fpm, g_force, found = int(td.get("rate", 0)), float(td.get("gForce", 0)), True
+        payload = f["landing"]
+        fpm = int(payload.get("rate", 0) or payload.get("touchDownRate", 0))
+        g_force = float(payload.get("gForce", 0))
+        weather = payload.get("weather", {})
+        found = True
 
     if not found:
         val = f.get("lastState", {}).get("speed", {}).get("touchDownRate")
@@ -465,7 +474,15 @@ def get_landing_data(f, details_type):
     if found and fpm != 0:
         fpm_val = -abs(fpm)
         g_str = f", **{g_force} G**" if g_force > 0 else ""
-        return f"📉 **{fpm_val} fpm**{g_str}"
+        
+        wind_str = ""
+        if weather and "windDir" in weather:
+            w_dir = int(weather.get("windDir", 0))
+            w_spd = int(round(weather.get("windSpd", 0)))
+            w_x = int(round(abs(weather.get("windX", 0))))
+            wind_str = f"\n💨 **{w_dir}° | {w_spd} kt** (crosswind: {w_x} kt)"
+            
+        return f"📉 **{fpm_val} fpm**{g_str}{wind_str}"
     
     return "📉 **N/A**"
 
