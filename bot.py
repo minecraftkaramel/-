@@ -1567,6 +1567,60 @@ async def on_message(message):
         return
     # -------------------------------------------------------------
 
+	# --- 📌 КОМАНДА: !pin <ID> (ЗАКРІПИТИ ПОВІДОМЛЕННЯ) ---
+    if message.content.startswith("!pin"):
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        
+        parts = message.content.split()
+        if len(parts) < 2:
+            return await message.channel.send("⚠️ Usage: `!pin <Message_ID>`")
+            
+        target_id = parts[1]
+        if not target_id.isdigit():
+             return await message.channel.send("⚠️ ID must be a number.")
+
+        found_message = await find_discord_message(int(target_id), message)
+        
+        if found_message:
+            try:
+                await found_message.pin()
+                await message.channel.send(f"📌 **Message successfully pinned in {found_message.channel.mention}!**")
+            except discord.Forbidden:
+                await message.channel.send("❌ **Error:** I don't have 'Manage Messages' permission to pin this.")
+            except Exception as e:
+                await message.channel.send(f"❌ **Error pinning message:** {e}")
+        else:
+            await message.channel.send("❌ **Message not found.** (Check ID or bot permissions)")
+        return
+    # -------------------------------------------------------------
+
+    # --- 🧲 КОМАНДА: !unpin <ID> (ВІДКРІПИТИ ПОВІДОМЛЕННЯ) ---
+    if message.content.startswith("!unpin"):
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        
+        parts = message.content.split()
+        if len(parts) < 2:
+            return await message.channel.send("⚠️ Usage: `!unpin <Message_ID>`")
+            
+        target_id = parts[1]
+        if not target_id.isdigit():
+             return await message.channel.send("⚠️ ID must be a number.")
+
+        found_message = await find_discord_message(int(target_id), message)
+        
+        if found_message:
+            try:
+                await found_message.unpin()
+                await message.channel.send(f"🧲 **Message successfully unpinned in {found_message.channel.mention}!**")
+            except discord.Forbidden:
+                await message.channel.send("❌ **Error:** I don't have 'Manage Messages' permission to unpin this.")
+            except Exception as e:
+                await message.channel.send(f"❌ **Error unpinning message:** {e}")
+        else:
+            await message.channel.send("❌ **Message not found.** (Check ID or bot permissions)")
+        return
+    # -------------------------------------------------------------
+
     # --- 📚 КОМАНДА: !help (ДИНАМІЧНА ДЛЯ КОРИСТУВАЧІВ, АДМІНІВ ТА ВЛАСНИКА) ---
     if message.content == "!help":
         is_owner = message.author.id in ADMIN_IDS
