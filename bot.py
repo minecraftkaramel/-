@@ -1396,7 +1396,6 @@ async def on_message(message):
             if not ongoing or "results" not in ongoing or len(ongoing["results"]) == 0:
                 embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic Air Alliance", description="😴 **No active flights.**", color=0xffff00)
                 current_utc_time = datetime.now(timezone.utc).strftime('%H:%M')
-                embed.set_footer(text=f"✈️ Active flights: 0  |  🔄 Updated: {current_utc_time} UTC  |  Newsky API")
                 return await msg.edit(content=None, embed=embed)
             
             # 2. ЯКЩО РЕЙСИ Є, ОБРОБЛЯЄМО ЇХ
