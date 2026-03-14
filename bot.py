@@ -41,6 +41,7 @@ AIRPORTS_DB = {}
 BANNED_WOW_MESSAGES = set()
 MONITORING_STARTED = False
 LAST_TRAFFIC_TIME = 0.0
+TAXIING_FLIGHTS = set()
 last_sent_message = None
 
 # ---------- ДОПОМІЖНІ ФУНКЦІЇ ----------
@@ -1425,8 +1426,15 @@ async def on_message(message):
                     vs_fpm = int(spd.get("vs", 0))
                     takeoff_time = f.get("takeoffTimeAct")
                     
+                    global TAXIING_FLIGHTS
+                    if gs_kts >= 3 or f.get("depTimeAct") or len(f.get("path", [])) > 2:
+                        TAXIING_FLIGHTS.add(fid)
+                    
                     if not takeoff_time:
-                        phase_str = "🚕 Taxiing" if gs_kts >= 1 else "🛑 Boarding"
+                        if fid in TAXIING_FLIGHTS:
+                            phase_str = "🚕 Taxiing"
+                        else:
+                            phase_str = "🛑 Boarding"
                     else:
                         if agl_ft < 200 and gs_kts < 50:
                             phase_str = "🏁 Arrived"
