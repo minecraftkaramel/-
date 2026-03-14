@@ -1369,7 +1369,7 @@ async def on_message(message):
         return
     # -------------------------------------------------------------------------
     
-    # --- 📡 КОМАНДА: !traffic (ПОКАЗАТИ АКТИВНІ РЕЙСИ) ---
+# --- 📡 КОМАНДА: !traffic (ПОКАЗАТИ АКТИВНІ РЕЙСИ) ---
     if message.content == "!traffic":
         global LAST_TRAFFIC_TIME
         current_time = time.time()
@@ -1391,10 +1391,14 @@ async def on_message(message):
         async with aiohttp.ClientSession() as session:
             ongoing = await fetch_api(session, "/flights/ongoing")
             
+            # 1. ОБРОБКА СИТУАЦІЇ, КОЛИ НЕМАЄ РЕЙСІВ (Виправлено помилку!)
             if not ongoing or "results" not in ongoing or len(ongoing["results"]) == 0:
-                embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic Air Alliance", description="\n\n".join(desc_lines), color=0x3498db)
+                embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic Air Alliance", description="😴 **No active flights.**", color=0xffff00)
+                current_utc_time = datetime.now(timezone.utc).strftime('%H:%M')
+                embed.set_footer(text=f"✈️ Active flights: 0  |  🔄 Updated: {current_utc_time} UTC  |  Newsky API")
                 return await msg.edit(content=None, embed=embed)
             
+            # 2. ЯКЩО РЕЙСИ Є, ОБРОБЛЯЄМО ЇХ
             desc_lines = []
             for raw_f in ongoing["results"]:
                 fid = str(raw_f.get("_id") or raw_f.get("id"))
@@ -1402,6 +1406,7 @@ async def on_message(message):
                 det = await fetch_api(session, f"/flight/{fid}")
                 
                 alt_str, gs_str = "---", "---"
+                phase_str = "⏳ Unknown"
                 
                 if det and "flight" in det:
                     f = det["flight"]
@@ -1415,6 +1420,52 @@ async def on_message(message):
                     
                     gs_kts = int(spd.get("gs", 0))
                     gs_str = f"{gs_kts} kts"
+                    
+                    agl_ft = int(loc.get("agl", alt_ft))
+                    vs_fpm = int(spd.get("vs", 0))
+                    takeoff_time = f.get("takeoffTimeAct")
+                    
+                    if not takeoff_time:
+                        phase_str = "🚕 Taxiing" if gs_kts >= 1 else "🛑 Boarding"
+                    else:
+                        if agl_ft < 200 and gs_kts < 50:
+                            phase_str = "🏁 Arrived"
+                        elif agl_ft < 5000 and vs_fpm < -250:
+                            phase_str = "🛬 Approach"
+                        elif vs_fpm > 250:
+                            phase_str = "📈 Climb"
+                        elif vs_fpm < -250:
+                            phase_str = "📉 Descent"
+                        else:
+                            phase_str = "✈️ Cruise"
+                            path = f.get("path", [])
+                            if path:
+                                try:
+                                    current_ts = last_state.get("timestamp", time.time() * 1000) / 1000.0
+                                    found_old = False
+                                    old_alt = alt_ft
+                                    
+                                    for p in reversed(path):
+                                        p_time = p.get("createdAt")
+                                        if p_time:
+                                            p_ts = datetime.fromisoformat(p_time.replace("Z", "+00:00")).timestamp()
+                                            if (current_ts - p_ts) >= 300: 
+                                                old_alt = p.get("alt", alt_ft)
+                                                found_old = True
+                                                break
+                                    
+                                    if found_old:
+                                        if (alt_ft - old_alt) > 300:
+                                            phase_str = "📈 Climb"
+                                        elif (old_alt - alt_ft) > 300:
+                                            phase_str = "📉 Descent"
+                                    else:
+                                        takeoff_ts = datetime.fromisoformat(takeoff_time.replace("Z", "+00:00")).timestamp()
+                                        if (current_ts - takeoff_ts) < 300:
+                                            phase_str = "📈 Climb"
+                                        
+                                except Exception as e:
+                                    print(f"Path parsing error: {e}")
                 else:
                     f = raw_f
 
@@ -1433,9 +1484,9 @@ async def on_message(message):
                 dep = f.get("dep", {}).get("icao", "???") if isinstance(f.get("dep"), dict) else "???"
                 arr = f.get("arr", {}).get("icao", "???") if isinstance(f.get("arr"), dict) else "???"
                 
-                desc_lines.append(f"**{full_cs}** • {pilot} • {ac} • {dep} ➔ {arr}\n╰ 🏔️ {alt_str}  |  <:gs:1482073151071326229> {gs_str}")
+                desc_lines.append(f"**{full_cs}** • {pilot} • {ac} • {dep} ➔ {arr}\n╰ **{phase_str}** |  🏔️ {alt_str}  |  <:gs:1482073151071326229> {gs_str}")
             
-            embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic Air Alliance", description="\n".join(desc_lines), color=0x3498db)
+            embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic Air Alliance", description="\n\n".join(desc_lines), color=0x3498db)
             
             current_utc_time = datetime.now(timezone.utc).strftime('%H:%M')
             total_flights = len(ongoing["results"])
