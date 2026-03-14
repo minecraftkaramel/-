@@ -1431,20 +1431,20 @@ async def on_message(message):
                     
                     if not takeoff_time:
                         if fid in TAXIING_FLIGHTS:
-                            phase_str = "🚕 Taxiing"
+                            phase_str = "Taxiing"
                         else:
-                            phase_str = "🛑 Boarding"
+                            phase_str = "Boarding"
                     else:
                         if agl_ft < 200 and gs_kts < 50:
-                            phase_str = "🏁 Arrived"
+                            phase_str = "Arrived"
                         elif agl_ft < 5000 and vs_fpm < -250:
-                            phase_str = "🛬 Approach"
+                            phase_str = "Approach"
                         elif vs_fpm > 250:
-                            phase_str = "📈 Climb"
+                            phase_str = "Climb"
                         elif vs_fpm < -250:
-                            phase_str = "📉 Descent"
+                            phase_str = "Descent"
                         else:
-                            phase_str = "✈️ Cruise"
+                            phase_str = "Cruise"
                             path = f.get("path", [])
                             if path:
                                 try:
@@ -1463,13 +1463,13 @@ async def on_message(message):
                                     
                                     if found_old:
                                         if (alt_ft - old_alt) > 300:
-                                            phase_str = "📈 Climb"
+                                            phase_str = "Climb"
                                         elif (old_alt - alt_ft) > 300:
-                                            phase_str = "📉 Descent"
+                                            phase_str = "Descent"
                                     else:
                                         takeoff_ts = datetime.fromisoformat(takeoff_time.replace("Z", "+00:00")).timestamp()
                                         if (current_ts - takeoff_ts) < 300:
-                                            phase_str = "📈 Climb"
+                                            phase_str = "Climb"
                                         
                                 except Exception as e:
                                     print(f"Path parsing error: {e}")
@@ -1491,7 +1491,7 @@ async def on_message(message):
                 dep = f.get("dep", {}).get("icao", "???") if isinstance(f.get("dep"), dict) else "???"
                 arr = f.get("arr", {}).get("icao", "???") if isinstance(f.get("arr"), dict) else "???"
                 
-                desc_lines.append(f"**{full_cs}** • {pilot} • {ac} • {dep} ➔ {arr}\n╰ **{phase_str}** |  🏔️ {alt_str}  |  <:gs:1482073151071326229> {gs_str}")
+                desc_lines.append(f"**{full_cs}** • {pilot} • {ac} • {dep} ➔ {arr}\n╰ *ALT:* {alt_str}  |  GS: {gs_str}  |  {phase_str}")
             
             embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic Air Alliance", description="\n\n".join(desc_lines), color=0x3498db)
             
