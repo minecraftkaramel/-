@@ -485,7 +485,7 @@ def get_landing_data(f, details_type):
             if w_dir == 0 and w_spd > 0: 
                 w_dir = 360
                 
-            wind_str = f"\n💨 **{w_dir}° | {w_spd} kt** (crosswind: {w_x} kt)"
+            wind_str = f"\n<:gs:1482311111494733915> **{w_dir}° | {w_spd} kt** (crosswind: {w_x} kt)"
             
         return f"📉 **{fpm_val} fpm**{g_str}{wind_str}"
     
@@ -1491,7 +1491,7 @@ async def on_message(message):
                 dep = f.get("dep", {}).get("icao", "???") if isinstance(f.get("dep"), dict) else "???"
                 arr = f.get("arr", {}).get("icao", "???") if isinstance(f.get("arr"), dict) else "???"
                 
-                desc_lines.append(f"**{full_cs}** • {pilot} • {ac} • {dep} ➔ {arr}\n╰ *ALT:* {alt_str}  |  GS: {gs_str}  |  {phase_str}")
+                desc_lines.append(f"**{full_cs}** • {pilot} • {ac} • {dep} ➔ {arr}\n╰ ⛰️ {alt_str}  |  <:gs:1482311111494733915>{gs_str}  |  {phase_str}")
             
             embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic Air Alliance", description="\n\n".join(desc_lines), color=0x3498db)
             
