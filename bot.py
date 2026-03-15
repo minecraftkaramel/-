@@ -1481,7 +1481,7 @@ async def on_message(message):
         async with aiohttp.ClientSession() as session:
             ongoing = await fetch_api(session, "/flights/ongoing")
             
-            # 1. ОБРОБКА СИТУАЦІЇ, КОЛИ НЕМАЄ РЕЙСІВ (Виправлено помилку!)
+            # 1. ОБРОБКА СИТУАЦІЇ, КОЛИ НЕМАЄ РЕЙСІВ
             if not ongoing or "results" not in ongoing or len(ongoing["results"]) == 0:
                 embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic Air Alliance", description="😴 **No active flights.**", color=0xffff00)
                 current_utc_time = datetime.now(timezone.utc).strftime('%H:%M')
@@ -1504,6 +1504,7 @@ async def on_message(message):
                     loc = last_state.get("location", {})
                     spd = last_state.get("speed", {})
                     
+                    # alt_ft - стандартна висота (MSL) для ешелону, agl_ft - радіовисотомір
                     alt_ft = int(loc.get("alt", 0))
                     alt_str = f"{alt_ft:,}".replace(",", ".") + " ft"
                     
@@ -1512,56 +1513,56 @@ async def on_message(message):
                     
                     agl_ft = int(loc.get("agl", alt_ft))
                     vs_fpm = int(spd.get("vs", 0))
+                    
+                    dep_time = f.get("depTimeAct")
                     takeoff_time = f.get("takeoffTimeAct")
+                    arr_time = f.get("arrTimeAct") or f.get("landing")
                     
-                    global TAXIING_FLIGHTS
-                    if gs_kts >= 3 or f.get("depTimeAct") or len(f.get("path", [])) > 2:
-                        TAXIING_FLIGHTS.add(fid)
-                    
+                    # --- ЛОГІКА ФАЗ ПОЛЬОТУ ---
                     if not takeoff_time:
-                        if fid in TAXIING_FLIGHTS:
-                            phase_str = "Taxiing"
+                        if dep_time:
+                            phase_str = "🚜 Taxiing"
                         else:
-                            phase_str = "Boarding"
+                            phase_str = "🧳 Boarding"
                     else:
-                        if agl_ft < 200 and gs_kts < 50:
-                            phase_str = "Arrived"
-                        elif agl_ft < 5000 and vs_fpm < -250:
-                            phase_str = "Approach"
-                        elif vs_fpm > 250:
-                            phase_str = "Climb"
-                        elif vs_fpm < -250:
-                            phase_str = "Descent"
+                        if arr_time or (agl_ft < 200 and gs_kts < 50):
+                            if agl_ft > 200:
+                                phase_str = "⤴️ Go Around"
+                            else:
+                                phase_str = "🏁 Arrived"
                         else:
-                            phase_str = "Cruise"
-                            path = f.get("path", [])
-                            if path:
-                                try:
-                                    current_ts = last_state.get("timestamp", time.time() * 1000) / 1000.0
-                                    found_old = False
-                                    old_alt = alt_ft
-                                    
-                                    for p in reversed(path):
-                                        p_time = p.get("createdAt")
-                                        if p_time:
-                                            p_ts = datetime.fromisoformat(p_time.replace("Z", "+00:00")).timestamp()
-                                            if (current_ts - p_ts) >= 300: 
-                                                old_alt = p.get("alt", alt_ft)
-                                                found_old = True
-                                                break
-                                    
-                                    if found_old:
-                                        if (alt_ft - old_alt) > 300:
-                                            phase_str = "Climb"
-                                        elif (old_alt - alt_ft) > 300:
-                                            phase_str = "Descent"
-                                    else:
-                                        takeoff_ts = datetime.fromisoformat(takeoff_time.replace("Z", "+00:00")).timestamp()
-                                        if (current_ts - takeoff_ts) < 300:
-                                            phase_str = "Climb"
+                            # Аналіз історії для Cruise (перевірка MSL висоти 60 сек тому)
+                            current_ts = last_state.get("timestamp", time.time() * 1000) / 1000.0
+                            found_old = False
+                            old_alt = alt_ft
+                            
+                            for p in reversed(f.get("path", [])):
+                                p_time = p.get("createdAt")
+                                if p_time:
+                                    p_ts = datetime.fromisoformat(p_time.replace("Z", "+00:00")).timestamp()
+                                    if (current_ts - p_ts) >= 60:
+                                        old_alt = int(p.get("alt", alt_ft))
+                                        found_old = True
+                                        break
                                         
-                                except Exception as e:
-                                    print(f"Path parsing error: {e}")
+                            is_cruising = False
+                            if found_old and abs(alt_ft - old_alt) <= 250:
+                                is_cruising = True
+                            elif not found_old and abs(vs_fpm) <= 250:
+                                is_cruising = True
+                                
+                            if is_cruising:
+                                phase_str = "✈️ Cruise"
+                            elif vs_fpm < -250 or (found_old and (old_alt - alt_ft) > 250):
+                                if agl_ft < 10000:
+                                    phase_str = "🛬 Approach"
+                                else:
+                                    phase_str = "↘️ Descent"
+                            else:
+                                if agl_ft < 10000:
+                                    phase_str = "🛫 Departed"
+                                else:
+                                    phase_str = "↗️ Climb"
                 else:
                     f = raw_f
 
@@ -1580,7 +1581,7 @@ async def on_message(message):
                 dep = f.get("dep", {}).get("icao", "???") if isinstance(f.get("dep"), dict) else "???"
                 arr = f.get("arr", {}).get("icao", "???") if isinstance(f.get("arr"), dict) else "???"
                 
-                desc_lines.append(f"**{full_cs}** • {pilot} • {ac} • {dep} ➔ {arr}\n╰ ⛰️ {alt_str}  |  <:gss:1482312733583212544>{gs_str}  |  {phase_str}")
+                desc_lines.append(f"**{full_cs}** • {pilot} • {ac} • {dep} ➔ {arr}\n╰ ⛰️ {alt_str}  |  🛰️ {gs_str}  |  {phase_str}")
             
             embed = discord.Embed(title="📡 Live Traffic - Ukraine Classic Air Alliance", description="\n\n".join(desc_lines), color=0x3498db)
             
@@ -1591,7 +1592,7 @@ async def on_message(message):
             await msg.edit(content=None, embed=embed)
         return
     # -------------------------------------------------------------
-
+	
 	# --- 🎤 КОМАНДА: !enter <Channel_ID> (Зайти в голосовий канал) ---
     if message.content.startswith("!enter"):
         if not is_admin: return await message.channel.send("🚫 **Access Denied**")
