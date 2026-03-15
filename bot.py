@@ -901,6 +901,83 @@ async def on_message(message):
         return
     # -------------------------------------------------------------
 
+	# --- ➖ КОМАНДА: !delflight <ID> (ВІДНЯТИ РЕЙС ЗІ СТАТИСТИКИ) ---
+    if message.content.startswith("!delflight"):
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        
+        parts = message.content.split()
+        if len(parts) < 2:
+            return await message.channel.send("⚠️ Usage: `!delflight <Flight_ID>`")
+        
+        fid = parts[1]
+        msg = await message.channel.send(f"⏳ **Removing flight `{fid}` from stats...**")
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                det = await fetch_api(session, f"/flight/{fid}")
+                
+                if not det or "flight" not in det:
+                    return await msg.edit(content=f"❌ **Error:** Flight `{fid}` not found in API.")
+                
+                f = det["flight"]
+                sched_time = f.get("depTimeSched") or f.get("creationDate")
+                week_tag = get_iso_week(sched_time)
+                
+                stats = load_weekly_stats()
+                if week_tag not in stats:
+                    return await msg.edit(content=f"⚠️ Week `{week_tag}` not found in stats.")
+                
+                s = stats[week_tag]
+                
+                t = f.get("result", {}).get("totals", {})
+                balance = int(t.get("balance", 0))
+                
+                raw_pax = t.get("payload", {}).get("pax", 0)
+                if raw_pax == 0 and f.get("type") != "cargo":
+                    raw_pax = int(f.get("payload", {}).get("pax", 0))
+                    
+                cargo_kg = int(f.get("payload", {}).get("weights", {}).get("cargo", 0))
+                rating = float(f.get("rating", 0.0))
+                
+                pilot = f.get("pilot", {}).get("fullname", "Unknown Pilot")
+                
+                check_g, check_fpm = 0.0, 0
+                if "result" in f and "violations" in f["result"]:
+                    for v in f["result"]["violations"]:
+                        entry = v.get("entry", {}).get("payload", {}).get("touchDown", {})
+                        if entry:
+                            check_g = float(entry.get("gForce", 0))
+                            check_fpm = int(entry.get("rate", 0))
+                            break 
+                if check_g == 0 and "landing" in f:
+                    check_g = float(f.get("landing", {}).get("gForce", 0))
+                    check_fpm = int(f.get("landing", {}).get("rate", 0) or f.get("landing", {}).get("touchDownRate", 0))
+                    
+                fpm_val = -abs(check_fpm) if check_fpm != 0 else 0
+                
+                if s["flights"] > 0:
+                    s["flights"] -= 1
+                    s["earnings"] -= balance
+                    s["pax"] -= raw_pax
+                    s["cargo"] -= cargo_kg
+                    s["rating_sum"] -= rating
+                    s["fpm_sum"] -= fpm_val
+                    s["g_sum"] -= check_g
+                
+                if pilot in s.get("pilots", {}):
+                    s["pilots"][pilot] -= 1
+                    if s["pilots"][pilot] <= 0: del s["pilots"][pilot]
+                
+                save_weekly_stats(stats)
+                
+                cs = f.get("flightNumber") or f.get("callsign") or "Unknown"
+                await msg.edit(content=f"✅ **Flight `{cs}` successfully REMOVED from week `{week_tag}`!**\n*(Note: Totals and averages are fixed. Weekly records like 'Hardest Landing' are not changed).*")
+                
+        except Exception as e:
+            await msg.edit(content=f"❌ **Internal error occurred:** {e}")
+        return
+    # -------------------------------------------------------------
+
         # --- 📊 КОМАНДА: !stats (СКАЧАТИ ФАЙЛ СТАТИСТИКИ) ---
     if message.content == "!stats":
         if not is_admin: return await message.channel.send("🚫 **Access Denied**")
