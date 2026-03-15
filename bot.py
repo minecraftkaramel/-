@@ -204,6 +204,18 @@ async def check_and_publish_weekly_stats(channel, state):
                 except Exception as e:
                     print(f"Error pinning message: {e}")
 
+            try:
+                owner = await client.fetch_user(ADMIN_IDS[0])
+                dates_str = get_week_dates_string(week_tag)
+                file_bin = io.BytesIO(json.dumps({week_tag: s}, indent=4).encode('utf-8'))
+                
+                await owner.send(
+                    content=f"📁 **Архів тижня: {week_tag}** ({dates_str})", 
+                    file=discord.File(file_bin, filename=f"weekly_stats_{week_tag}.json")
+                )
+            except Exception as e:
+                print(f"Error sending stats DM to admin: {e}")
+
             weeks_to_delete.append(week_tag)
             
     if weeks_to_delete:
