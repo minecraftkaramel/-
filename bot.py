@@ -1403,6 +1403,50 @@ async def on_message(message):
         return
     # -------------------------------------------------------------
 
+	# --- 📝 КОМАНДА: !rename <ID> <текст> (ДОДАТИ ТЕКСТ В КАРТКУ ЧЕРЕЗ ПП) ---
+    if message.content.startswith("!rename"):
+        if not is_admin: return await message.channel.send("🚫 **Access Denied**")
+        
+        parts = message.content.split(maxsplit=2)
+        if len(parts) < 3:
+            return await message.channel.send("⚠️ Usage: `!rename <Message_ID> <text>`")
+            
+        target_id_str = parts[1]
+        if not target_id_str.isdigit():
+             return await message.channel.send("⚠️ ID must be a number.")
+             
+        new_text = parts[2]
+        
+        found_message = await find_discord_message(int(target_id_str), message)
+        
+        if found_message:
+            if found_message.author == client.user and found_message.embeds:
+                try:
+                    embed = found_message.embeds[0]
+                    
+                    old_desc = embed.description or ""
+                    embed.description = f"{old_desc}\n\n{new_text}"
+                    
+                    await found_message.edit(embed=embed)
+                    
+                    channel_mention = found_message.channel.mention if hasattr(found_message.channel, 'mention') else "Direct Messages"
+                    await message.channel.send(f"✅ **Success!** Text added to message in {channel_mention}.")
+                    
+                    if not isinstance(message.channel, discord.DMChannel):
+                        try:
+                            await message.delete()
+                        except discord.Forbidden:
+                            pass
+                            
+                except Exception as e:
+                    await message.channel.send(f"❌ **Error updating message:** {e}")
+            else:
+                await message.channel.send("❌ **Error:** Message must be sent by the bot and contain an embed.")
+        else:
+            await message.channel.send("❌ **Message not found.** (Check ID or bot permissions)")
+        return
+    # -------------------------------------------------------------
+
     # --- 🔄 КОМАНДА: !undo (ВИДАЛИТИ ОСТАННЄ) ---
     if message.content == "!undo":
         if not is_admin: 
