@@ -395,6 +395,7 @@ def format_airport_string(icao, api_name):
             "Vinnitsa": "Vinnytsia",
             "Zaporizhia": "Zaporizhzhia",
             "Larnarca": "Larnaca",
+			"Frankfurt-am-Main": "Frankfurt am Main",
             "Sharm el-Sheikh": "Sharm El Sheikh"
         }
         
