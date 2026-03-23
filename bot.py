@@ -169,7 +169,7 @@ def update_weekly_stats(f, week_tag):
         
     save_weekly_stats(stats)
 
-async def check_and_publish_weekly_stats(channel, state):
+async def check_and_publish_weekly_stats(channel, state, ongoing_ids):
     stats = load_weekly_stats()
     if not stats: return
     
@@ -183,9 +183,12 @@ async def check_and_publish_weekly_stats(channel, state):
         active_flight_exists = False
         for fid, fstate in state.items():
             if isinstance(fstate, dict) and not fstate.get("completed") and fstate.get("week") == week_tag:
-                active_flight_exists = True
-                break
-                
+                if fid in ongoing_ids:
+                    active_flight_exists = True
+                    break
+                else:
+                    print(f"👻 Ігноруємо завислий рейс (привид): {fid}")
+                    
         if not active_flight_exists:
             try:
                 pinned_msgs = await channel.pins()
@@ -1923,11 +1926,14 @@ async def main_loop():
     async with aiohttp.ClientSession() as session:
         while True:
             try:
+                ongoing_ids = None
                 ongoing = await fetch_api(session, "/flights/ongoing")
                 if ongoing and "results" in ongoing:
+                    ongoing_ids = set()
                     print(f"📡 Tracking {len(ongoing['results'])} flights...", end='\r')
                     for raw_f in ongoing["results"]:
                         fid = str(raw_f.get("_id") or raw_f.get("id"))
+                        ongoing_ids.add(fid)
                         
                         state.setdefault(fid, {})
                         
@@ -2010,10 +2016,12 @@ async def main_loop():
 
                 save_state(state)
                 
-                # 🔥 НОВЕ: Перевірка і публікація звіту в кінці кожного циклу 🔥
-                await check_and_publish_weekly_stats(channel, state)
+                # 🔥 ОНОВЛЕНИЙ ВИКЛИК: Передаємо список живих рейсів (ongoing_ids)
+                if ongoing_ids is not None:
+                    await check_and_publish_weekly_stats(channel, state, ongoing_ids)
                 
-            except Exception as e: print(f"Loop Error: {e}")
+            except Exception as e: 
+                print(f"Loop Error: {e}")
             
             await asyncio.sleep(CHECK_INTERVAL)
 
