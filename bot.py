@@ -235,19 +235,36 @@ async def publish_weekly_embed(channel, week_tag, s):
     avg_fpm = int(s["fpm_sum"] / fl)
     avg_g = round(s["g_sum"] / fl, 2)
     
-    top_pilot = max(s["pilots"], key=s["pilots"].get) if s["pilots"] else "None"
-    top_pilot_flights = s["pilots"].get(top_pilot, 0)
+    medals = ["🥇", "🥈", "🥉"]
     
-    top_apt = max(s["airports"], key=s["airports"].get) if s["airports"] else "None"
-    top_apt_ops = s["airports"].get(top_apt, 0)
-    
-    ac_dict = s.get("aircrafts", {})
-    top_ac = max(ac_dict, key=ac_dict.get) if ac_dict else "None"
-    top_ac_flights = ac_dict.get(top_ac, 0)
-    
-    db_data = AIRPORTS_DB.get(top_apt.upper(), {})
-    apt_flag = get_flag(db_data.get("country", "XX"))
-    
+    # --- ТОП 3 ПІЛОТИ ---
+    sorted_pilots = sorted(s.get("pilots", {}).items(), key=lambda x: x[1], reverse=True)[:3]
+    pilots_str = ""
+    if not sorted_pilots:
+        pilots_str = "╰ None\n"
+    else:
+        for i, (p_name, p_flights) in enumerate(sorted_pilots):
+            pilots_str += f"╰ {medals[i]} **{p_name}** ({p_flights} flights)\n"
+            
+    # --- ТОП 3 АЕРОПОРТИ ---
+    sorted_apts = sorted(s.get("airports", {}).items(), key=lambda x: x[1], reverse=True)[:3]
+    apts_str = ""
+    if not sorted_apts:
+        apts_str = "╰ None\n"
+    else:
+        for i, (apt_icao, apt_ops) in enumerate(sorted_apts):
+            apt_flag = get_flag(AIRPORTS_DB.get(apt_icao.upper(), {}).get("country", "XX"))
+            apts_str += f"╰ {medals[i]} {apt_flag} **{apt_icao}** ({apt_ops} ops)\n"
+            
+    # --- ТОП 3 ЛІТАКИ ---
+    sorted_acs = sorted(s.get("aircrafts", {}).items(), key=lambda x: x[1], reverse=True)[:3]
+    acs_str = ""
+    if not sorted_acs:
+        acs_str = "╰ None\n"
+    else:
+        for i, (ac_icao, ac_flights) in enumerate(sorted_acs):
+            acs_str += f"╰ {medals[i]} **{ac_icao}** ({ac_flights} flights)\n"
+            
     rec = s["records"]
     
     def format_duration(minutes):
@@ -272,8 +289,8 @@ async def publish_weekly_embed(channel, week_tag, s):
         f"📦 **Cargo Carried:** {s['cargo']:,} kg\n\n"
         
         f"### 🏆 Weekly Records\n"
-        f"🥇 **Most Active Pilot:**\n"
-        f"╰ {top_pilot} ({top_pilot_flights} flights)\n\n"
+        f"👨‍✈️ **Most Active Pilots:**\n"
+        f"{pilots_str}\n"
         
         f"🧈 **Butter Landing:**\n"
         f"╰ {rec['butter']['pilot']} ({rec['butter']['fpm']} fpm, {rec['butter']['g']} G)\n\n"
@@ -291,11 +308,11 @@ async def publish_weekly_embed(channel, week_tag, s):
         f"📊 **Average Rating:** {avg_rating}\n"
         f"📉 **Average FPM:** {avg_fpm} fpm | {avg_g} G\n\n"
         
-        f"📍 **Most Popular Airport:**\n"
-        f"╰ {apt_flag} **{top_apt}** — {top_apt_ops} operations\n\n"
+        f"📍 **Most Popular Airports:**\n"
+        f"{apts_str}\n"
         
         f"✈️ **Most Popular Aircraft:**\n"
-        f"╰ **{top_ac}** — {top_ac_flights} flights"
+        f"{acs_str.rstrip()}"
     )
     
     embed = discord.Embed(
